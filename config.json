@@ -1,0 +1,27 @@
+{
+	"tcp_ip" : "127.0.0.1",
+	"per_threshold" : 100,
+	"reply_delay" : 10,
+	"request_delay" : 10,
+	"total_clients" : [5555,6666,7777],
+	"1" : {
+		"tcp_port" : 5555
+	},
+	"2" : {
+		"tcp_port" : 6666
+	},
+	"3" : {
+		"tcp_port" : 7777
+	},
+	"reverse_dict" :{
+		"7777": {
+			"proc_id" : "3"
+		},
+		"6666": {
+			"proc_id" : "2"
+		},
+		"5555": {
+			"proc_id" : "1"
+		}
+	}	
+}
