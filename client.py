@@ -131,9 +131,9 @@ class Server():
         connectThread = Thread(target=self.connectAsClient) #thread to connect as clients to others
         connectThread.setDaemon(True)
         connectThread.start()
-        #sendThread = Thread(target=self.sendData) #thread to send data !!
-        #sendThread.setDaemon(True)
-        #sendThread.start()
+        sendThread = Thread(target=self.sendData) #thread to send data !!
+        sendThread.setDaemon(True)
+        sendThread.start()
         self.checkForClientRqst()
 
     #Method to initialize Logging
@@ -221,43 +221,56 @@ class Server():
         while True:
             try:
                 #Sending messages and handling dictionaries goes here
-                print "Vacating all the dictionaries !!"
+                #print "Vacating all the dictionaries !!"
                 # dictionaries format== {to:from, to:from, to:from} #can "to" be non unique??
-
-                for chan in self.kiosk.send_prepare_dict:
+                send_prep_list = list( self.kiosk.send_prepare_dict.keys() )
+                for chan in send_prep_list:
+                    print "@@@to_send_prepare" + chan
                     to_val=chan
                     from_val=self.kiosk.send_prepare_dict[chan]
                     print 'Sending prepare request to: '+ to_val
                     to_send = json.dumps({'senderID': from_val, 'type': 'prep','msg': 'makeMeLeader'})
-                    send_channels[to_val].send(to_send)
+                    self.config.send_channels[to_val].send(to_send)
+                    del(self.kiosk.send_prepare_dict[chan])
 
-                for chan in self.kiosk.send_ack_prepare_dict:
+
+                send_ack_prepare_list=list(self.kiosk.send_ack_prepare_dict.keys())
+                for chan in send_ack_prepare_list:
                     to_val=chan
                     from_val=self.kiosk.send_ack_prepare_dict[chan]
                     print 'Sending acknowled. for prepare to: '+ to_val
                     to_send = json.dumps({'senderID': from_val, 'type': 'ack_prep','last_accept_id': self.kiosk.ACCEPTED_BALLT_ID , 'last_accept_val' : self.kiosk.ACCEPT_BALLT_VAL})
-                    send_channels[to_val].send(to_send)
+                    self.config.send_channels[to_val].send(to_send)
+                    del(self.kiosk.send_ack_prepare_dict[chan])
 
-                for chan in self.kiosk.send_accept_dict:
+                send_accept_list= list(self.kiosk.send_accept_dict.keys())
+                for chan in send_accept_list:
                     to_val=chan
                     from_val=self.kiosk.send_accept_dict[chan]
                     print 'Sending accept request to: '+to_val
                     to_send = json.dumps({'senderID': from_val, 'type': 'accept','accept_val': self.kiosk.FINAL_ACCEPT_VALUE_SENT })
-                    send_channels[to_val].send(to_send)
+                    self.config.send_channels[to_val].send(to_send)
+                    del(self.kiosk.send_accept_dict[chan])
+                    
+                
 
-                for chan in self.kiosk.send_ack_accept_dict:
+                send_ack_accept_list=list(self.kiosk.send_ack_accept_dict.keys())
+                for chan in send_ack_accept_list:
                     to_val=chan
                     from_val=self.kiosk.send_ack_accept_dict[chan]
                     print 'Sending acknowled. for accept to: '+to_val
                     to_send = json.dumps({'senderID': from_val, 'type': 'ack_accept'})
-                    send_channels[to_val].send(to_send)
-
-                for chan in self.kiosk.send_commit_dict:
+                    self.config.send_channels[to_val].send(to_send)
+                    del(self.kiosk.send_ack_accept_dict[chan])
+ 
+                send_commit_list= list(self.kiosk.send_commit_dict.keys())
+                for chan in send_commit_list:
                     to_val=chan
                     from_val=self.kiosk.send_commit_dict[chan]
                     print 'Sending commit request to: '+to_val
                     to_send = json.dumps({'senderID': from_val, 'type': 'commit', 'msg': self.kiosk.ACCEPT_BALLT_VAL })
-                    send_channels[to_val].send(to_send)
+                    self.config.send_channels[to_val].send(to_send)
+                    del(self.kiosk.send_commit_dict[chan])
 
 
                     
@@ -273,6 +286,7 @@ class Server():
 
         while 1==1:
             #time.sleep(1)
+
             msg = sys.stdin.readline()
             msg = msg[:-1]  # omitting the newline
             if msg == 'exit':
@@ -286,7 +300,7 @@ class Server():
                 #This is just a test message send to show how kiosk and config can be used
                 self.kiosk.CURRENT_LEADER = msg
                 for key in self.config.send_channels:
-                    self.config.send_channels[key].send(msg)
+                    self.kiosk.send_prepare_dict[key]=msg
                 #send proposal to multiple acceptors ...we will send to ppl in qurom and expect to get reply from all to reach majority !
                 #think upon how this qurom is going to be formed ...config file !
                 #HIGHEST_PREPARE_ID=proposer_id #it sassums itself in quorum too

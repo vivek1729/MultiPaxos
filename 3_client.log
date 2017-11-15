@@ -1,0 +1,30 @@
+2017-11-15 14:18:46,353 - __main__ - DEBUG - {u'1': <socket._socketobject object at 0x10399f750>}
+2017-11-15 14:18:46,353 - __main__ - DEBUG - 1
+2017-11-15 14:18:46,353 - __main__ - DEBUG - [6666]
+2017-11-15 14:18:51,355 - __main__ - DEBUG - {u'1': <socket._socketobject object at 0x10399f750>, u'2': <socket._socketobject object at 0x10399f830>}
+2017-11-15 14:18:51,355 - __main__ - DEBUG - 2
+2017-11-15 14:18:51,355 - __main__ - DEBUG - []
+2017-11-15 14:22:40,888 - __main__ - DEBUG - {u'1': <socket._socketobject object at 0x1020297c0>}
+2017-11-15 14:22:40,891 - __main__ - DEBUG - 1
+2017-11-15 14:22:40,891 - __main__ - DEBUG - [6666]
+2017-11-15 14:22:45,897 - __main__ - DEBUG - {u'1': <socket._socketobject object at 0x1020297c0>, u'2': <socket._socketobject object at 0x102029830>}
+2017-11-15 14:22:45,897 - __main__ - DEBUG - 2
+2017-11-15 14:22:45,897 - __main__ - DEBUG - []
+2017-11-15 14:56:43,455 - __main__ - DEBUG - {u'1': <socket._socketobject object at 0x1017656e0>}
+2017-11-15 14:56:43,461 - __main__ - DEBUG - 1
+2017-11-15 14:56:43,461 - __main__ - DEBUG - [6666]
+2017-11-15 14:56:48,464 - __main__ - DEBUG - {u'1': <socket._socketobject object at 0x1017656e0>, u'2': <socket._socketobject object at 0x101765830>}
+2017-11-15 14:56:48,464 - __main__ - DEBUG - 2
+2017-11-15 14:56:48,465 - __main__ - DEBUG - []
+2017-11-15 14:58:22,685 - __main__ - DEBUG - {u'1': <socket._socketobject object at 0x10dcde7c0>}
+2017-11-15 14:58:22,690 - __main__ - DEBUG - 1
+2017-11-15 14:58:22,700 - __main__ - DEBUG - [6661]
+2017-11-15 14:58:27,706 - __main__ - DEBUG - {u'1': <socket._socketobject object at 0x10dcde7c0>, u'2': <socket._socketobject object at 0x10dcde830>}
+2017-11-15 14:58:27,706 - __main__ - DEBUG - 2
+2017-11-15 14:58:27,706 - __main__ - DEBUG - []
+2017-11-15 15:01:26,384 - __main__ - DEBUG - {u'1': <socket._socketobject object at 0x109de5750>}
+2017-11-15 15:01:26,387 - __main__ - DEBUG - 1
+2017-11-15 15:01:26,387 - __main__ - DEBUG - [6661]
+2017-11-15 15:01:31,394 - __main__ - DEBUG - {u'1': <socket._socketobject object at 0x109de5750>, u'2': <socket._socketobject object at 0x109de5830>}
+2017-11-15 15:01:31,395 - __main__ - DEBUG - 2
+2017-11-15 15:01:31,401 - __main__ - DEBUG - []
