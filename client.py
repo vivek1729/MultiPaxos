@@ -6,6 +6,7 @@ import random
 import traceback
 import logging
 from threading import Thread
+#from collections import deque
 # are v assumig tht there will be a single poposer in a quorum ?? No... 
 #if you are a proposer you shud have a dictionary for ur own work 
 #When I am acting as a proposer.. canI concurrentln act as acceptor or shud Isend my "prepar" or "accept" atomically and then act as an acceptor
@@ -35,6 +36,8 @@ class ClientThread(Thread):
                     print 'Received some data..'+received_data
                     print 'Current Leader'
                     #self.kiosk.* will have updated values no matter which class changes it now
+                    print "Populating the relevant dictionaries !!"
+                    # dictionaries format== {to:from, to:from, to:from}
                     print self.kiosk.CURRENT_LEADER
 
             except Exception as e:
@@ -91,7 +94,14 @@ class Kiosk():
         self.ACCEPTED_BALLT_ID= 1
         self.HIGHEST_PREPARE_ID=1
         self.CURRENT_PREPARE_ID=None
+        self.FINAL_ACCEPT_VALUE_SENT=1
         self.ACCEPT_BALLT_VAL='x'
+        ##Introducing 5 Dicts
+        self.send_prepare_dict={}; ##Dict for sending prepare
+        self.send_ack_prepare_dict={}; ##Dict for sending ack to prepare
+        self.send_accept_dict={}; ##Dict for sending accept Phase 2
+        self.send_ack_accept_dict={}; ##Dict for sending ack to accept
+        self.send_commit_dict={};##Dict for sending commit as distinguished learner
 
 class Server():
 
@@ -104,6 +114,7 @@ class Server():
         self.serverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.serverSocket.bind((self.config.TCP_IP, self.config.TCP_PORT))
         self.serverSocket.listen(10)
+
 
         self.setup()
 
@@ -200,23 +211,64 @@ class Server():
     ########################
     #  Communication func  #
     ########################
+
     def sendData(self):
-        #you can send proposal
-        #you can send acknolwdgemtnet
-        #you can send acceptance
-        #you can send acceptance ackn to distinguished learner
+        #you can send proposal.
+        #you can send acknolwdgemtnet.
+        #you can send acceptance.
+        #you can send acceptance ackn to distinguished learner.
+        #you can send commit as distinguished learner.
         while True:
             try:
-                #Sending messages and handling queus goes here
-                print "Dummy message right now."
+                #Sending messages and handling dictionaries goes here
+                print "Vacating all the dictionaries !!"
+                # dictionaries format== {to:from, to:from, to:from} #can "to" be non unique??
+
+                for chan in self.kiosk.send_prepare_dict:
+                    to_val=chan
+                    from_val=self.kiosk.send_prepare_dict[chan]
+                    print 'Sending prepare request to: '+ to_val
+                    to_send = json.dumps({'senderID': from_val, 'type': 'prep','msg': 'makeMeLeader'})
+                    send_channels[to_val].send(to_send)
+
+                for chan in self.kiosk.send_ack_prepare_dict:
+                    to_val=chan
+                    from_val=self.kiosk.send_ack_prepare_dict[chan]
+                    print 'Sending acknowled. for prepare to: '+ to_val
+                    to_send = json.dumps({'senderID': from_val, 'type': 'ack_prep','last_accept_id': self.kiosk.ACCEPTED_BALLT_ID , 'last_accept_val' : self.kiosk.ACCEPT_BALLT_VAL})
+                    send_channels[to_val].send(to_send)
+
+                for chan in self.kiosk.send_accept_dict:
+                    to_val=chan
+                    from_val=self.kiosk.send_accept_dict[chan]
+                    print 'Sending accept request to: '+to_val
+                    to_send = json.dumps({'senderID': from_val, 'type': 'accept','accept_val': self.kiosk.FINAL_ACCEPT_VALUE_SENT })
+                    send_channels[to_val].send(to_send)
+
+                for chan in self.kiosk.send_ack_accept_dict:
+                    to_val=chan
+                    from_val=self.kiosk.send_ack_accept_dict[chan]
+                    print 'Sending acknowled. for accept to: '+to_val
+                    to_send = json.dumps({'senderID': from_val, 'type': 'ack_accept'})
+                    send_channels[to_val].send(to_send)
+
+                for chan in self.kiosk.send_commit_dict:
+                    to_val=chan
+                    from_val=self.kiosk.send_commit_dict[chan]
+                    print 'Sending commit request to: '+to_val
+                    to_send = json.dumps({'senderID': from_val, 'type': 'commit', 'msg': self.kiosk.ACCEPT_BALLT_VAL })
+                    send_channels[to_val].send(to_send)
+
+
                     
             except Exception as e:
-                print 'Some error occured: ' + str(e)
+                print 'Error while sending message (vacating dictionaries)' + str(e)
                 #self.config.logger.info('Some error occured: ' + str(e))
-        #self.config.logger.info('It got out of the while loop? some prob??')
+                #self.config.logger.info('It got out of the while loop? some prob??')
 
-
-    #entry point for client to send some request to my server       
+    ########################
+    #  Entry point for leader election  #
+    ########################     
     def checkForClientRqst(self):
 
         while 1==1:
