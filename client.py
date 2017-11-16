@@ -6,6 +6,7 @@ import random
 import traceback
 import logging
 from threading import Thread
+#from collections import deque
 # are v assumig tht there will be a single poposer in a quorum ?? No... 
 #if you are a proposer you shud have a dictionary for ur own work 
 #When I am acting as a proposer.. canI concurrentln act as acceptor or shud Isend my "prepar" or "accept" atomically and then act as an acceptor
@@ -32,10 +33,48 @@ class ClientThread(Thread):
             try:
                 received_data = self.conn.recv(2048)
                 if received_data != '':
+                    received_data_json=json.loads(received_data)
+                    request_type = received_data_json['type']
+                    sender_id = received_data_json['senderID']
                     print 'Received some data..'+received_data
-                    print 'Current Leader'
-                    #self.kiosk.* will have updated values no matter which class changes it now
-                    print self.kiosk.CURRENT_LEADER
+                    if request_type == 'prep':
+                        if self.kiosk.HIGHEST_PREPARE_ID is None or received_data_json['proposalNum'] >= self.kiosk.HIGHEST_PREPARE_ID:
+                            self.kiosk.HIGHEST_PREPARE_ID = received_data_json['proposalNum']
+                            #Populate the ack dictionary
+                            print 'Populating ack dictionary now..'
+                            self.kiosk.send_ack_prepare_dict[sender_id] = self.config.client_id
+                    elif request_type == 'ack_prep':
+                        self.kiosk.ack_counter += 1
+                        req_id = None
+                        if received_data_json['last_accept_id'] is not None:
+                            req_id = int(received_data_json['last_accept_id'])
+                        self.kiosk.ack_arr.append({'id':req_id,'val':received_data_json['last_accept_val']})
+                        print 'Ack requests received till now'
+                        print self.kiosk.ack_arr
+                        if self.kiosk.ack_counter >= self.kiosk.majority_count:
+                            #Got majority. I can now set accept val
+                            max_item = max(self.kiosk.ack_arr, key=lambda x:x['id'])
+                            if max_item['val'] is None:
+                                self.kiosk.FINAL_ACCEPT_VALUE_SENT = self.kiosk.CURRENT_MESSAGE
+                            else:
+                                self.kiosk.FINAL_ACCEPT_VALUE_SENT = max_item['val']
+
+                            print 'Accept val to be sent '+str(self.kiosk.FINAL_ACCEPT_VALUE_SENT)
+                            #Ready to send accept requests now
+                            for key in self.config.REM_CLIENTS:
+                                self.kiosk.send_accept_dict[key]=self.config.client_id
+
+                            print 'Send accept dict is '
+                            print self.kiosk.send_accept_dict
+                    elif request_type == 'accept':
+                        if received_data_json['proposalNum'] >= self.kiosk.HIGHEST_PREPARE_ID:
+                            self.kiosk.ACCEPTED_BALLT_ID = received_data_json['proposalNum']
+                            self.kiosk.ACCEPT_BALLT_VAL = received_data_json['accept_val']
+                            #Populate the ack dictionary
+                            print 'Populating ack accept dictionary now..'
+                            self.kiosk.send_ack_accept_dict[sender_id] = self.config.client_id
+                    
+                    
 
             except Exception as e:
                 #print e
@@ -76,10 +115,12 @@ class SystemConfig():
         self.send_channels = {}
         self.receive_channels = {}
         self.queue_send_markers = []
+        self.REM_CLIENTS = []
         print 'Total clients is '
         print self.TOTAL_CLIENTS
         for client in self.TOTAL_CLIENTS:
             key = self.PROC_ID_MAPPING[str(client)]['proc_id']
+            self.REM_CLIENTS.append(key)
             self.channel_states[key] = {}
             self.channel_states[key]['flag'] = False
             self.channel_states[key]['state'] = []
@@ -88,10 +129,21 @@ class SystemConfig():
 class Kiosk():
     def __init__(self):
         self.CURRENT_LEADER=None
-        self.ACCEPTED_BALLT_ID= 1
-        self.HIGHEST_PREPARE_ID=1
+        self.ACCEPTED_BALLT_ID= None
+        self.HIGHEST_PREPARE_ID=None
         self.CURRENT_PREPARE_ID=None
-        self.ACCEPT_BALLT_VAL='x'
+        self.CURRENT_MESSAGE=None
+        self.FINAL_ACCEPT_VALUE_SENT=None
+        self.ACCEPT_BALLT_VAL=None
+        self.ack_arr = []
+        self.majority_count = 2
+        self.ack_counter = 1
+        ##Introducing 5 Dicts
+        self.send_prepare_dict={}; ##Dict for sending prepare
+        self.send_ack_prepare_dict={}; ##Dict for sending ack to prepare
+        self.send_accept_dict={}; ##Dict for sending accept Phase 2
+        self.send_ack_accept_dict={}; ##Dict for sending ack to accept
+        self.send_commit_dict={};##Dict for sending commit as distinguished learner
 
 class Server():
 
@@ -104,6 +156,7 @@ class Server():
         self.serverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.serverSocket.bind((self.config.TCP_IP, self.config.TCP_PORT))
         self.serverSocket.listen(10)
+
 
         self.setup()
 
@@ -120,9 +173,9 @@ class Server():
         connectThread = Thread(target=self.connectAsClient) #thread to connect as clients to others
         connectThread.setDaemon(True)
         connectThread.start()
-        #sendThread = Thread(target=self.sendData) #thread to send data !!
-        #sendThread.setDaemon(True)
-        #sendThread.start()
+        sendThread = Thread(target=self.sendData) #thread to send data !!
+        sendThread.setDaemon(True)
+        sendThread.start()
         self.checkForClientRqst()
 
     #Method to initialize Logging
@@ -176,20 +229,26 @@ class Server():
             try:
                 if len(self.config.TOTAL_CLIENTS) > 0:
                     tcpClient = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-                    #self.config.logger.info( 'Trying to connect to '+str(self.config.TOTAL_CLIENTS[0]))                    
+                    #self.config.logger.info( 'Trying to connect to '+str(self.config.TOTAL_CLIENTS[0]))
+                    print 'Trying to connect to '+str(self.config.TOTAL_CLIENTS[0])                 
                     tcpClient.connect((self.config.TCP_IP, self.config.TOTAL_CLIENTS[0]))
                     key = self.config.PROC_ID_MAPPING[str(self.config.TOTAL_CLIENTS[0])]['proc_id']
                     #self.config.logger.info('Key is '+key)
                     self.config.send_channels[key] = tcpClient
                     self.config.logger.debug( self.config.send_channels) 
-                    #self.config.logger.info('Length of send channels')                 
+                    #self.config.logger.info('Length of send channels')
+                    print 'Length of send channels'
+                    print len(self.config.send_channels)          
                     self.config.logger.debug( len(self.config.send_channels))
                     del self.config.TOTAL_CLIENTS[0]
-                    #self.config.logger.info('Remaining clients are ')                   
+                    #self.config.logger.info('Remaining clients are ')    
+                    print 'Remaining clients are '
+                    print self.config.TOTAL_CLIENTS             
                     self.config.logger.debug(self.config.TOTAL_CLIENTS)
                     
                 else:
                     #self.config.logger.info('Have successfully connected to all clients!')
+                    print 'Have successfully connected to all clients!'
                     break
             except Exception as e:
                 #self.config.logger.info('Unable to connect')
@@ -200,41 +259,110 @@ class Server():
     ########################
     #  Communication func  #
     ########################
+
     def sendData(self):
-        #you can send proposal
-        #you can send acknolwdgemtnet
-        #you can send acceptance
-        #you can send acceptance ackn to distinguished learner
+        #you can send proposal.
+        #you can send acknolwdgemtnet.
+        #you can send acceptance.
+        #you can send acceptance ackn to distinguished learner.
+        #you can send commit as distinguished learner.
         while True:
             try:
-                #Sending messages and handling queus goes here
-                print "Dummy message right now."
+                #Sending messages and handling dictionaries goes here
+                #print "Vacating all the dictionaries !!"
+                # dictionaries format== {to:from, to:from, to:from} #can "to" be non unique??
+                send_prep_list = list( self.kiosk.send_prepare_dict.keys() )
+                for chan in send_prep_list:
+                    print "@@@to_send_prepare" + chan
+                    to_val=chan
+                    from_val=self.kiosk.send_prepare_dict[chan]
+                    print 'Sending prepare request to: '+ to_val
+                    to_send = json.dumps({'senderID': from_val, 'proposalNum':self.kiosk.CURRENT_PREPARE_ID, 'type': 'prep','msg': 'makeMeLeader'})
+                    self.config.send_channels[to_val].send(to_send)
+                    del(self.kiosk.send_prepare_dict[chan])
+
+
+                send_ack_prepare_list=list(self.kiosk.send_ack_prepare_dict.keys())
+                for chan in send_ack_prepare_list:
+                    to_val=chan
+                    from_val=self.kiosk.send_ack_prepare_dict[chan]
+                    print 'Sending acknowled. for prepare to: '+ to_val
+                    to_send = json.dumps({'senderID': from_val, 'type': 'ack_prep','last_accept_id': self.kiosk.ACCEPTED_BALLT_ID , 'last_accept_val' : self.kiosk.ACCEPT_BALLT_VAL})
+                    self.config.send_channels[to_val].send(to_send)
+                    del(self.kiosk.send_ack_prepare_dict[chan])
+
+                send_accept_list= list(self.kiosk.send_accept_dict.keys())
+                for chan in send_accept_list:
+                    to_val=chan
+                    from_val=self.kiosk.send_accept_dict[chan]
+                    print 'Sending accept request to: '+to_val
+                    to_send = json.dumps({'senderID': from_val, 'proposalNum':self.kiosk.CURRENT_PREPARE_ID, 'type': 'accept','accept_val': self.kiosk.FINAL_ACCEPT_VALUE_SENT })
+                    self.config.send_channels[to_val].send(to_send)
+                    del(self.kiosk.send_accept_dict[chan])
+                    
+                
+
+                send_ack_accept_list=list(self.kiosk.send_ack_accept_dict.keys())
+                for chan in send_ack_accept_list:
+                    to_val=chan
+                    from_val=self.kiosk.send_ack_accept_dict[chan]
+                    print 'Sending acknowled. for accept to: '+to_val
+                    to_send = json.dumps({'senderID': from_val, 'type': 'ack_accept'})
+                    self.config.send_channels[to_val].send(to_send)
+                    del(self.kiosk.send_ack_accept_dict[chan])
+ 
+                send_commit_list= list(self.kiosk.send_commit_dict.keys())
+                for chan in send_commit_list:
+                    to_val=chan
+                    from_val=self.kiosk.send_commit_dict[chan]
+                    print 'Sending commit request to: '+to_val
+                    to_send = json.dumps({'senderID': from_val, 'type': 'commit', 'msg': self.kiosk.ACCEPT_BALLT_VAL })
+                    self.config.send_channels[to_val].send(to_send)
+                    del(self.kiosk.send_commit_dict[chan])
+
+                time.sleep(5)
                     
             except Exception as e:
-                print 'Some error occured: ' + str(e)
+                print 'Error while sending message (vacating dictionaries)' + str(e)
                 #self.config.logger.info('Some error occured: ' + str(e))
-        #self.config.logger.info('It got out of the while loop? some prob??')
+                #self.config.logger.info('It got out of the while loop? some prob??')
 
-
-    #entry point for client to send some request to my server       
+    ########################
+    #  Entry point for leader election  #
+    ########################     
     def checkForClientRqst(self):
 
         while 1==1:
             #time.sleep(1)
+
             msg = sys.stdin.readline()
             msg = msg[:-1]  # omitting the newline
             if msg == 'exit':
                 break
             if msg != '':
                 #self.config.logger.info('Value proposed by client...'+msg)
-                print 'Initiating proposal'
+                print 'Initiating election'
                
                 #proposer_id =  #any ballot number greater than it has knowldege of !
 
                 #This is just a test message send to show how kiosk and config can be used
-                self.kiosk.CURRENT_LEADER = msg
-                for key in self.config.send_channels:
-                    self.config.send_channels[key].send(msg)
+                #self.kiosk.CURRENT_LEADER = msg
+                #Populate the send_prepare_dict
+
+                for key in self.config.REM_CLIENTS:
+                    self.kiosk.send_prepare_dict[key]=self.config.client_id
+
+                print 'Proposal dict is '
+                print self.kiosk.send_prepare_dict
+                self.kiosk.CURRENT_MESSAGE = msg
+                #Set the proposal ID too
+                if self.kiosk.HIGHEST_PREPARE_ID is None:
+                    self.kiosk.HIGHEST_PREPARE_ID = 1
+                    self.kiosk.CURRENT_PREPARE_ID = 1
+                else:
+                    self.kiosk.CURRENT_PREPARE_ID = self.kiosk.HIGHEST_PREPARE_ID + 1
+                print 'highest proposal num'+str(self.kiosk.HIGHEST_PREPARE_ID)
+                print 'current proposal num'+str(self.kiosk.CURRENT_PREPARE_ID)
                 #send proposal to multiple acceptors ...we will send to ppl in qurom and expect to get reply from all to reach majority !
                 #think upon how this qurom is going to be formed ...config file !
                 #HIGHEST_PREPARE_ID=proposer_id #it sassums itself in quorum too
