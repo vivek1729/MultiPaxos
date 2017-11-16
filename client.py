@@ -146,6 +146,7 @@ class SystemConfig():
 #This class will have all the Kiosk specific configuration
 class Kiosk():
     def __init__(self):
+        self.TICKETS=100
         self.CURRENT_LEADER=None
         self.ACCEPTED_BALLT_ID= None
         self.HIGHEST_PREPARE_ID=None
@@ -360,33 +361,36 @@ class Server():
                 break
             if msg != '':
                 #self.config.logger.info('Value proposed by client...'+msg)
-                print 'Initiating election'
-               
-                #proposer_id =  #any ballot number greater than it has knowldege of !
+                tokens = msg.split(' ')
+                if tokens[0] == 'buy':
+                    #Command would be of the form buy 5 which means buy 5 tickets
+                    print 'Initiating election'
+                   
+                    #proposer_id =  #any ballot number greater than it has knowldege of !
 
-                #This is just a test message send to show how kiosk and config can be used
-                #self.kiosk.CURRENT_LEADER = msg
-                #Populate the send_prepare_dict
+                    #This is just a test message send to show how kiosk and config can be used
+                    #self.kiosk.CURRENT_LEADER = msg
+                    #Populate the send_prepare_dict
 
-                for key in self.config.REM_CLIENTS:
-                    self.kiosk.send_prepare_dict[key]=self.config.client_id
+                    for key in self.config.REM_CLIENTS:
+                        self.kiosk.send_prepare_dict[key]=self.config.client_id
 
-                print 'Proposal dict is '
-                print self.kiosk.send_prepare_dict
-                self.kiosk.CURRENT_MESSAGE = msg
-                #Set the proposal ID too
-                if self.kiosk.HIGHEST_PREPARE_ID is None:
-                    self.kiosk.HIGHEST_PREPARE_ID = 1
-                    self.kiosk.CURRENT_PREPARE_ID = 1
-                else:
-                    self.kiosk.CURRENT_PREPARE_ID = self.kiosk.HIGHEST_PREPARE_ID + 1
-                print 'highest proposal num'+str(self.kiosk.HIGHEST_PREPARE_ID)
-                print 'current proposal num'+str(self.kiosk.CURRENT_PREPARE_ID)
-                #send proposal to multiple acceptors ...we will send to ppl in qurom and expect to get reply from all to reach majority !
-                #think upon how this qurom is going to be formed ...config file !
-                #HIGHEST_PREPARE_ID=proposer_id #it sassums itself in quorum too
-                #TO_SEND_DICT_PROPOSER ={#all the qurom ppl }
-                #SEND_STATE='Proposer' #acting as a proposer
+                    print 'Proposal dict is '
+                    print self.kiosk.send_prepare_dict
+                    self.kiosk.CURRENT_MESSAGE = tokens[1]
+                    #Set the proposal ID too
+                    if self.kiosk.HIGHEST_PREPARE_ID is None:
+                        self.kiosk.HIGHEST_PREPARE_ID = 1
+                        self.kiosk.CURRENT_PREPARE_ID = 1
+                    else:
+                        self.kiosk.CURRENT_PREPARE_ID = self.kiosk.HIGHEST_PREPARE_ID + 1
+                    print 'highest proposal num'+str(self.kiosk.HIGHEST_PREPARE_ID)
+                    print 'current proposal num'+str(self.kiosk.CURRENT_PREPARE_ID)
+                    #send proposal to multiple acceptors ...we will send to ppl in qurom and expect to get reply from all to reach majority !
+                    #think upon how this qurom is going to be formed ...config file !
+                    #HIGHEST_PREPARE_ID=proposer_id #it sassums itself in quorum too
+                    #TO_SEND_DICT_PROPOSER ={#all the qurom ppl }
+                    #SEND_STATE='Proposer' #acting as a proposer
             sys.stdout.write('[Me] ')
             sys.stdout.flush()
 
