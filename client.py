@@ -66,6 +66,8 @@ class ClientThread(Thread):
 
                             print 'Send accept dict is '
                             print self.kiosk.send_accept_dict
+                            #Reset counter
+                            self.kiosk.ack_counter = 1
                     elif request_type == 'accept':
                         if received_data_json['proposalNum'] >= self.kiosk.HIGHEST_PREPARE_ID:
                             self.kiosk.ACCEPTED_BALLT_ID = received_data_json['proposalNum']
@@ -73,6 +75,22 @@ class ClientThread(Thread):
                             #Populate the ack dictionary
                             print 'Populating ack accept dictionary now..'
                             self.kiosk.send_ack_accept_dict[sender_id] = self.config.client_id
+                    elif request_type == 'ack_accept':
+                        self.kiosk.accept_counter += 1
+                        if self.kiosk.accept_counter >= self.kiosk.majority_count:
+                            #Update the self.kiosk.ACCEPT_BALLT_VAL for the sender
+                            #Confirm this with Ishani.
+                            self.kiosk.ACCEPT_BALLT_VAL = self.kiosk.FINAL_ACCEPT_VALUE_SENT
+                            self.kiosk.ACCEPTED_BALLT_ID = self.kiosk.CURRENT_PREPARE_ID
+                            print 'Received accept from majority'
+                            print 'Broadcast commit message now'
+                            #Ready to send commit requests now
+                            for key in self.config.REM_CLIENTS:
+                                self.kiosk.send_commit_dict[key]=self.config.client_id
+
+                            print 'Send commit dict is '
+                            print self.kiosk.send_commit_dict
+
                     
                     
 
@@ -138,6 +156,7 @@ class Kiosk():
         self.ack_arr = []
         self.majority_count = 2
         self.ack_counter = 1
+        self.accept_counter = 1
         ##Introducing 5 Dicts
         self.send_prepare_dict={}; ##Dict for sending prepare
         self.send_ack_prepare_dict={}; ##Dict for sending ack to prepare
