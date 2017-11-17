@@ -90,6 +90,14 @@ class ClientThread(Thread):
 
                             print 'Send commit dict is '
                             print self.kiosk.send_commit_dict
+                    elif request_type=='commit':
+                        print 'tym to add in my log'
+
+                    elif request_type== 'leaderAuth'
+                        print 'I got leader auth '
+
+                    else
+                        print 'some error'
 
                     
                     
