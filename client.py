@@ -69,6 +69,11 @@ class ClientThread(Thread):
 
                             print 'Send accept dict is '
                             print self.kiosk.send_accept_dict
+                            #The sender should also send ack accept request to all other users here
+                            #Because it will accept its own request always. and so let other processes know about this ack_accept
+                            #The other processes should get this ack_accept request.?
+                            #Or may be I don't have to send it because of the way counters are handled. I initialize it to 1.
+                            #1 means it has already has ack accept from itself.
 
                             
                     elif request_type == 'accept':
@@ -76,12 +81,14 @@ class ClientThread(Thread):
                             self.kiosk.ACCEPTED_BALLT_ID = (received_data_json['proposalNum'],int(sender_id))
                             self.kiosk.ACCEPT_BALLT_VAL = received_data_json['accept_val']
                             #Populate the ack dictionary
+                            #Broadcast to all processes now instead of just the sender (Phase 2)
                             print 'Populating ack accept dictionary now..'
                             self.kiosk.send_ack_accept_dict[sender_id] = self.config.client_id
                     elif request_type == 'ack_accept':
                         self.kiosk.accept_counter += 1
                         #The modified if condition makes sure a delayed ack accept from a process
                         #after the majority does not trigger further message sending
+                        #Even if this is not sender, it will get ack accepts from ther processes and calculate majority (Phase 2)
                         if self.kiosk.accept_counter == self.kiosk.majority_count:
                             #Update the self.kiosk.ACCEPT_BALLT_VAL for the sender
                             #Confirm this with Ishani.
