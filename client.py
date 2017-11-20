@@ -38,8 +38,11 @@ class ClientThread(Thread):
                     sender_id = received_data_json['senderID']
                     print 'Received some data..'+received_data
                     if request_type == 'prep':
-                        if self.kiosk.HIGHEST_PREPARE_ID is None or received_data_json['proposalNum'] >= self.kiosk.HIGHEST_PREPARE_ID:
-                            self.kiosk.HIGHEST_PREPARE_ID = received_data_json['proposalNum']
+                        if self.kiosk.HIGHEST_PREPARE_ID is None or \
+                        received_data_json['proposalNum'] > self.kiosk.HIGHEST_PREPARE_ID[0] or \
+                        ( received_data_json['proposalNum'] == self.kiosk.HIGHEST_PREPARE_ID[0] \
+                            and int(sender_id) > self.kiosk.HIGHEST_PREPARE_ID[1]):
+                            self.kiosk.HIGHEST_PREPARE_ID = (received_data_json['proposalNum'],int(sender_id))
                             #Populate the ack dictionary
                             print 'Populating ack dictionary now..'
                             self.kiosk.send_ack_prepare_dict[sender_id] = self.config.client_id
@@ -47,12 +50,12 @@ class ClientThread(Thread):
                         self.kiosk.ack_counter += 1
                         req_id = None
                         if received_data_json['last_accept_id'] is not None:
-                            req_id = int(received_data_json['last_accept_id'])
+                            req_id = received_data_json['last_accept_id'] #This will now be a tuple
                         self.kiosk.ack_arr.append({'id':req_id,'val':received_data_json['last_accept_val']})
                         print 'Ack requests received till now'
                         print self.kiosk.ack_arr
-                        if self.kiosk.ack_counter >= self.kiosk.majority_count:
-                            #Got majority. I can now set accept val
+                        if self.kiosk.ack_counter == self.kiosk.majority_count:
+                            print 'Got majority. I can now set accept val'
                             max_item = max(self.kiosk.ack_arr, key=lambda x:x['id'])
                             if max_item['val'] is None:
                                 self.kiosk.FINAL_ACCEPT_VALUE_SENT = self.kiosk.CURRENT_MESSAGE
@@ -66,30 +69,71 @@ class ClientThread(Thread):
 
                             print 'Send accept dict is '
                             print self.kiosk.send_accept_dict
-                            #Reset counter
-                            self.kiosk.ack_counter = 1
+
+                            
                     elif request_type == 'accept':
-                        if received_data_json['proposalNum'] >= self.kiosk.HIGHEST_PREPARE_ID:
-                            self.kiosk.ACCEPTED_BALLT_ID = received_data_json['proposalNum']
+                        if received_data_json['proposalNum'] >= self.kiosk.HIGHEST_PREPARE_ID[0]:
+                            self.kiosk.ACCEPTED_BALLT_ID = (received_data_json['proposalNum'],int(sender_id))
                             self.kiosk.ACCEPT_BALLT_VAL = received_data_json['accept_val']
                             #Populate the ack dictionary
                             print 'Populating ack accept dictionary now..'
                             self.kiosk.send_ack_accept_dict[sender_id] = self.config.client_id
                     elif request_type == 'ack_accept':
                         self.kiosk.accept_counter += 1
-                        if self.kiosk.accept_counter >= self.kiosk.majority_count:
+                        #The modified if condition makes sure a delayed ack accept from a process
+                        #after the majority does not trigger further message sending
+                        if self.kiosk.accept_counter == self.kiosk.majority_count:
                             #Update the self.kiosk.ACCEPT_BALLT_VAL for the sender
                             #Confirm this with Ishani.
-                            self.kiosk.ACCEPT_BALLT_VAL = self.kiosk.FINAL_ACCEPT_VALUE_SENT
-                            self.kiosk.ACCEPTED_BALLT_ID = self.kiosk.CURRENT_PREPARE_ID
-                            print 'Received accept from majority'
-                            print 'Broadcast commit message now'
-                            #Ready to send commit requests now
-                            for key in self.config.REM_CLIENTS:
-                                self.kiosk.send_commit_dict[key]=self.config.client_id
+                            accept_id_tuple = (received_data_json['accept_id'][0],received_data_json['accept_id'][1])
+                            #If this ballot number does not exist in log only then go ahead.
+                            if not any(d['id'] == accept_id_tuple for d in self.kiosk.log):
+                                self.kiosk.ACCEPT_BALLT_VAL = self.kiosk.FINAL_ACCEPT_VALUE_SENT
+                                self.kiosk.ACCEPTED_BALLT_ID = (self.kiosk.CURRENT_PREPARE_ID,int(self.config.client_id))
+                                print 'Received accept from majority'
+                                print 'Broadcast commit message now'
+                                #Ready to send commit requests now
+                                for key in self.config.REM_CLIENTS:
+                                    self.kiosk.send_commit_dict[key]=self.config.client_id
 
-                            print 'Send commit dict is '
-                            print self.kiosk.send_commit_dict
+                                print 'Send commit dict is '
+                                print self.kiosk.send_commit_dict
+                                print 'Also add '+str(self.kiosk.ACCEPT_BALLT_VAL)+' to my log right now'
+                                self.kiosk.log.append({'id':self.kiosk.ACCEPTED_BALLT_ID,'val':self.kiosk.ACCEPT_BALLT_VAL})
+                                #Reset counters
+                                self.kiosk.ack_counter = 1
+                                self.kiosk.accept_counter = 1
+                                #Reset acknowledgement array
+                                self.kiosk.ack_arr = []
+                                print 'Contents of the log========='
+                                print self.kiosk.log
+                                #Current process is the leader!
+                                self.kiosk.CURRENT_LEADER = self.config.client_id
+                                #Inform the other processes that you are the current leader through some broadcast.
+                    elif request_type=='commit':
+                        print 'tym to add in my log'
+                        accept_id_tuple = (received_data_json['accept_id'][0],received_data_json['accept_id'][1])
+                        self.kiosk.log.append({'id':accept_id_tuple,'val':received_data_json['msg']})
+                        #Reset counters
+                        self.kiosk.ack_counter = 1
+                        self.kiosk.accept_counter = 1
+                        #Reset acknowledgement array
+                        self.kiosk.ack_arr = []
+                        print 'Contents of the log========='
+                        print self.kiosk.log
+                        #Reset kiosk variables as log entry is committed
+                        print 'Resetting the variables'
+                        self.kiosk.ACCEPTED_BALLT_ID= None #This will be a tuple now
+                        self.kiosk.CURRENT_PREPARE_ID=None #This is just an integer. Represents the proposal number for the sender
+                        self.kiosk.CURRENT_MESSAGE=None
+                        self.kiosk.FINAL_ACCEPT_VALUE_SENT=None
+                        self.kiosk.ACCEPT_BALLT_VAL=None
+
+                    elif request_type== 'leaderAuth':
+                        print 'I got leader auth '
+
+                    else:
+                        print 'some error'
 
                     
                     
@@ -148,9 +192,9 @@ class Kiosk():
     def __init__(self):
         self.TICKETS=100
         self.CURRENT_LEADER=None
-        self.ACCEPTED_BALLT_ID= None
-        self.HIGHEST_PREPARE_ID=None
-        self.CURRENT_PREPARE_ID=None
+        self.ACCEPTED_BALLT_ID= None #This will be a tuple now
+        self.HIGHEST_PREPARE_ID=None #This will be a tuple now
+        self.CURRENT_PREPARE_ID=None #This is just an integer. Represents the proposal number for the sender
         self.CURRENT_MESSAGE=None
         self.FINAL_ACCEPT_VALUE_SENT=None
         self.ACCEPT_BALLT_VAL=None
@@ -158,6 +202,8 @@ class Kiosk():
         self.majority_count = 2
         self.ack_counter = 1
         self.accept_counter = 1
+        ##Log list
+        self.log = []
         ##Introducing 5 Dicts
         self.send_prepare_dict={}; ##Dict for sending prepare
         self.send_ack_prepare_dict={}; ##Dict for sending ack to prepare
@@ -327,19 +373,28 @@ class Server():
                     to_val=chan
                     from_val=self.kiosk.send_ack_accept_dict[chan]
                     print 'Sending acknowled. for accept to: '+to_val
-                    to_send = json.dumps({'senderID': from_val, 'type': 'ack_accept'})
+                    to_send = json.dumps({'senderID': from_val, 'type': 'ack_accept', 'accept_id': self.kiosk.ACCEPTED_BALLT_ID, 'msg': self.kiosk.ACCEPT_BALLT_VAL})
                     self.config.send_channels[to_val].send(to_send)
                     del(self.kiosk.send_ack_accept_dict[chan])
  
                 send_commit_list= list(self.kiosk.send_commit_dict.keys())
+                len_commit_list = len(send_commit_list)
                 for chan in send_commit_list:
                     to_val=chan
                     from_val=self.kiosk.send_commit_dict[chan]
                     print 'Sending commit request to: '+to_val
-                    to_send = json.dumps({'senderID': from_val, 'type': 'commit', 'msg': self.kiosk.ACCEPT_BALLT_VAL })
+                    to_send = json.dumps({'senderID': from_val, 'type': 'commit', 'accept_id': self.kiosk.ACCEPTED_BALLT_ID, 'msg': self.kiosk.ACCEPT_BALLT_VAL })
                     self.config.send_channels[to_val].send(to_send)
                     del(self.kiosk.send_commit_dict[chan])
-
+                if len_commit_list > 0:
+                    #Commit message has been sent to all followers
+                    #reset variables now
+                    print 'Resetting the variables'
+                    self.kiosk.ACCEPTED_BALLT_ID= None #This will be a tuple now
+                    self.kiosk.CURRENT_PREPARE_ID=None #This is just an integer. Represents the proposal number for the sender
+                    self.kiosk.CURRENT_MESSAGE=None
+                    self.kiosk.FINAL_ACCEPT_VALUE_SENT=None
+                    self.kiosk.ACCEPT_BALLT_VAL=None
                 time.sleep(5)
                     
             except Exception as e:
@@ -380,10 +435,14 @@ class Server():
                     self.kiosk.CURRENT_MESSAGE = tokens[1]
                     #Set the proposal ID too
                     if self.kiosk.HIGHEST_PREPARE_ID is None:
-                        self.kiosk.HIGHEST_PREPARE_ID = 1
+                        #This is a tuple now
+                        self.kiosk.HIGHEST_PREPARE_ID = (1,int(self.config.client_id))
                         self.kiosk.CURRENT_PREPARE_ID = 1
                     else:
-                        self.kiosk.CURRENT_PREPARE_ID = self.kiosk.HIGHEST_PREPARE_ID + 1
+                        #This is a tuple now. So I fetch the first element and increment it to set current prepare id
+                        self.kiosk.CURRENT_PREPARE_ID = self.kiosk.HIGHEST_PREPARE_ID[0] + 1
+                        #Update highest ballot number as current request proposal is largest
+                        self.kiosk.HIGHEST_PREPARE_ID = (self.kiosk.CURRENT_PREPARE_ID,int(self.config.client_id))
                     print 'highest proposal num'+str(self.kiosk.HIGHEST_PREPARE_ID)
                     print 'current proposal num'+str(self.kiosk.CURRENT_PREPARE_ID)
                     #send proposal to multiple acceptors ...we will send to ppl in qurom and expect to get reply from all to reach majority !
