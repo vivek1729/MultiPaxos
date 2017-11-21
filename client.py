@@ -97,8 +97,8 @@ class ClientThread(Thread):
                             accept_id_tuple = (received_data_json['accept_id'][0],received_data_json['accept_id'][1])
                             #If this ballot number does not exist in log only then go ahead.
                             if not any(d['id'] == accept_id_tuple for d in self.kiosk.log):
-                                self.kiosk.ACCEPT_BALLT_VAL = self.kiosk.FINAL_ACCEPT_VALUE_SENT
-                                self.kiosk.ACCEPTED_BALLT_ID = (self.kiosk.CURRENT_PREPARE_ID,int(self.config.client_id))
+                                self.kiosk.ACCEPT_BALLT_VAL = received_data_json['msg']
+                                self.kiosk.ACCEPTED_BALLT_ID = accept_id_tuple
                                 print 'Received accept from majority'
                                 print 'Broadcast commit message now'
                                 #Ready to send commit requests now
