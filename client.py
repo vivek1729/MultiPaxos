@@ -77,7 +77,9 @@ class ClientThread(Thread):
 
                             
                     elif request_type == 'accept':
-                        if received_data_json['proposalNum'] >= self.kiosk.HIGHEST_PREPARE_ID[0]:
+                        if received_data_json['proposalNum'] > self.kiosk.HIGHEST_PREPARE_ID[0] or \
+                        ( received_data_json['proposalNum'] == self.kiosk.HIGHEST_PREPARE_ID[0] \
+                            and int(sender_id) >= self.kiosk.HIGHEST_PREPARE_ID[1]):
                             self.kiosk.ACCEPTED_BALLT_ID = (received_data_json['proposalNum'],int(sender_id))
                             self.kiosk.ACCEPT_BALLT_VAL = received_data_json['accept_val']
                             #Populate the ack dictionary
@@ -116,6 +118,7 @@ class ClientThread(Thread):
                                 print self.kiosk.log
                                 #Current process is the leader!
                                 self.kiosk.CURRENT_LEADER = self.config.client_id
+                                print 'I am the LEADER NOW! WOWS!'
                                 #Inform the other processes that you are the current leader through some broadcast.
                     elif request_type=='commit':
                         print 'tym to add in my log'
@@ -207,8 +210,8 @@ class Kiosk():
         self.ACCEPT_BALLT_VAL=None
         self.ack_arr = []
         self.majority_count = 2
-        self.ack_counter = 1
-        self.accept_counter = 1
+        self.ack_counter = 1 #I assume the sender i.e. process making the proposal will automatically acknowledge proposal
+        self.accept_counter = 1 #I assume the sender i.e. process making the proposal will automatically accept proposal
         ##Log list
         self.log = []
         ##Introducing 5 Dicts
