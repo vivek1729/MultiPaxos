@@ -32,6 +32,7 @@ class ClientThread(Thread):
         while True:
             try:
                 received_data = self.conn.recv(2048)
+                print 'Received data #########'+received_data
                 if received_data != '':
                     received_data_json=json.loads(received_data)
                     request_type = received_data_json['type']
@@ -84,42 +85,57 @@ class ClientThread(Thread):
                             self.kiosk.ACCEPT_BALLT_VAL = received_data_json['accept_val']
                             #Populate the ack dictionary
                             #Broadcast to all processes now instead of just the sender (Phase 2)
-                            print 'Populating ack accept dictionary now..'
-                            self.kiosk.send_ack_accept_dict[sender_id] = self.config.client_id
+                            print 'Populating ack accept list now. Need to broadcast to all clients'
+                            for key in self.config.REM_CLIENTS:
+                                self.kiosk.send_ack_accept_list.append({'to':key,'from':self.config.client_id,'accept_id':self.kiosk.ACCEPTED_BALLT_ID,'accept_val':self.kiosk.ACCEPT_BALLT_VAL})
                     elif request_type == 'ack_accept':
-                        self.kiosk.accept_counter += 1
-                        #The modified if condition makes sure a delayed ack accept from a process
-                        #after the majority does not trigger further message sending
-                        #Even if this is not sender, it will get ack accepts from ther processes and calculate majority (Phase 2)
-                        if self.kiosk.accept_counter == self.kiosk.majority_count:
-                            #Update the self.kiosk.ACCEPT_BALLT_VAL for the sender
-                            #Confirm this with Ishani.
+                        if received_data_json['accept_id'][0] > self.kiosk.HIGHEST_PREPARE_ID[0] or \
+                        ( received_data_json['accept_id'][0] == self.kiosk.HIGHEST_PREPARE_ID[0] \
+                            and received_data_json['accept_id'][1] >= self.kiosk.HIGHEST_PREPARE_ID[1]):
                             accept_id_tuple = (received_data_json['accept_id'][0],received_data_json['accept_id'][1])
-                            #If this ballot number does not exist in log only then go ahead.
-                            if not any(d['id'] == accept_id_tuple for d in self.kiosk.log):
-                                self.kiosk.ACCEPT_BALLT_VAL = received_data_json['msg']
-                                self.kiosk.ACCEPTED_BALLT_ID = accept_id_tuple
-                                print 'Received accept from majority'
-                                print 'Broadcast commit message now'
-                                #Ready to send commit requests now
-                                for key in self.config.REM_CLIENTS:
-                                    self.kiosk.send_commit_dict[key]=self.config.client_id
+                            print 'State of ack counter dict...'
+                            print self.kiosk.ack_counter_dict
+                            if accept_id_tuple in self.kiosk.ack_counter_dict:
+                                self.kiosk.ack_counter_dict[accept_id_tuple] += 1
+                            else:
+                                self.kiosk.ack_counter_dict[accept_id_tuple] = 2
+                            #The modified if condition makes sure a delayed ack accept from a process
+                            #after the majority does not trigger further message sending
+                            #Even if this is not sender, it will get ack accepts from ther processes and calculate majority (Phase 2)
+                            if self.kiosk.ack_counter_dict[accept_id_tuple] == self.kiosk.majority_count:
+                                #Update the self.kiosk.ACCEPT_BALLT_VAL for the sender
+                                #Confirm this with Ishani.
+                                #If this ballot number does not exist in log only then go ahead.
+                                if not any(d['id'] == accept_id_tuple for d in self.kiosk.log):
+                                    self.kiosk.ACCEPT_BALLT_VAL = received_data_json['msg']
+                                    self.kiosk.ACCEPTED_BALLT_ID = accept_id_tuple
+                                    print 'Received accept from majority'
+                                    print 'No need to send commit message. Ack accept is broadcast. So chill'
+                                    #Ready to send commit requests now
+                                    #for key in self.config.REM_CLIENTS:
+                                    #    self.kiosk.send_commit_dict[key]=self.config.client_id
 
-                                print 'Send commit dict is '
-                                print self.kiosk.send_commit_dict
-                                print 'Also add '+str(self.kiosk.ACCEPT_BALLT_VAL)+' to my log right now'
-                                self.kiosk.log.append({'id':self.kiosk.ACCEPTED_BALLT_ID,'val':self.kiosk.ACCEPT_BALLT_VAL})
-                                #Reset counters
-                                self.kiosk.ack_counter = 1
-                                self.kiosk.accept_counter = 1
-                                #Reset acknowledgement array
-                                self.kiosk.ack_arr = []
-                                print 'Contents of the log========='
-                                print self.kiosk.log
-                                #Current process is the leader!
-                                self.kiosk.CURRENT_LEADER = self.config.client_id
-                                print 'I am the LEADER NOW! WOWS!'
-                                #Inform the other processes that you are the current leader through some broadcast.
+                                    #print 'Send commit dict is '
+                                    #print self.kiosk.send_commit_dict
+                                    print 'Also add '+str(self.kiosk.ACCEPT_BALLT_VAL)+' to my log right now'
+                                    self.kiosk.log.append({'id':self.kiosk.ACCEPTED_BALLT_ID,'val':self.kiosk.ACCEPT_BALLT_VAL})
+                                    #Reset counters
+                                    #self.kiosk.ack_counter = 1
+                                    #self.kiosk.accept_counter = 1
+                                    #Reset acknowledgement array
+                                    #self.kiosk.ack_arr = []
+                                    print 'Contents of the log========='
+                                    print self.kiosk.log
+                                    #Current process is the leader!
+                                    self.kiosk.CURRENT_LEADER = self.config.client_id
+                                    print 'I am the LEADER NOW! WOWS!'
+                                    #Inform the other processes that you are the current leader through some broadcast.
+                                    print 'Resetting the variables'
+                                    self.kiosk.ACCEPTED_BALLT_ID= None #This will be a tuple now
+                                    self.kiosk.CURRENT_PREPARE_ID=None #This is just an integer. Represents the proposal number for the sender
+                                    self.kiosk.CURRENT_MESSAGE=None
+                                    self.kiosk.FINAL_ACCEPT_VALUE_SENT=None
+                                    self.kiosk.ACCEPT_BALLT_VAL=None
                     elif request_type=='commit':
                         print 'tym to add in my log'
                         accept_id_tuple = (received_data_json['accept_id'][0],received_data_json['accept_id'][1])
@@ -211,6 +227,9 @@ class Kiosk():
         self.ack_arr = []
         self.majority_count = 2
         self.ack_counter = 1 #I assume the sender i.e. process making the proposal will automatically acknowledge proposal
+        #I need to have a counter dictionary for ack acceptance instead of a single value since different
+        #processes might be having different proposals and acks are broadcasted so..
+        self.ack_counter_dict = {}
         self.accept_counter = 1 #I assume the sender i.e. process making the proposal will automatically accept proposal
         ##Log list
         self.log = []
@@ -220,6 +239,10 @@ class Kiosk():
         self.send_accept_dict={}; ##Dict for sending accept Phase 2
         self.send_ack_accept_dict={}; ##Dict for sending ack to accept
         self.send_commit_dict={};##Dict for sending commit as distinguished learner
+        #Ack accept trying with list. Because we need to broadcast to all other processes on ever accept
+        #So for different proposals we might have different messages so dict might not cut it.
+        self.send_ack_accept_list = []
+
 
 class Server():
 
@@ -378,17 +401,20 @@ class Server():
                     
                 
 
-                send_ack_accept_list=list(self.kiosk.send_ack_accept_dict.keys())
-                for chan in send_ack_accept_list:
-                    to_val=chan
-                    from_val=self.kiosk.send_ack_accept_dict[chan]
+                #send_ack_accept_list=list(self.kiosk.send_ack_accept_dict.keys())
+                #This list will contain broadcast info to be sent to all clients!
+                len_commit_list = len(self.kiosk.send_ack_accept_list)
+                while len(self.kiosk.send_ack_accept_list) > 0:
+                    chan = self.kiosk.send_ack_accept_list[0]
+                    to_val=chan['to']
+                    from_val=chan['from']
                     print 'Sending acknowled. for accept to: '+to_val
-                    to_send = json.dumps({'senderID': from_val, 'type': 'ack_accept', 'accept_id': self.kiosk.ACCEPTED_BALLT_ID, 'msg': self.kiosk.ACCEPT_BALLT_VAL})
+                    to_send = json.dumps({'senderID': from_val, 'type': 'ack_accept', 'accept_id': chan['accept_id'], 'msg': chan['accept_val']})
                     self.config.send_channels[to_val].send(to_send)
-                    del(self.kiosk.send_ack_accept_dict[chan])
+                    del(self.kiosk.send_ack_accept_list[0])
  
                 send_commit_list= list(self.kiosk.send_commit_dict.keys())
-                len_commit_list = len(send_commit_list)
+                #len_commit_list = len(send_commit_list)
                 for chan in send_commit_list:
                     to_val=chan
                     from_val=self.kiosk.send_commit_dict[chan]
@@ -455,6 +481,14 @@ class Server():
                         self.kiosk.HIGHEST_PREPARE_ID = (self.kiosk.CURRENT_PREPARE_ID,int(self.config.client_id))
                     print 'highest proposal num'+str(self.kiosk.HIGHEST_PREPARE_ID)
                     print 'current proposal num'+str(self.kiosk.CURRENT_PREPARE_ID)
+
+                    print 'State of variables right now....'
+                    print 'Accept ballot id = '
+                    print self.kiosk.ACCEPTED_BALLT_ID
+                    print 'Final accept value to be sent = '
+                    print self.kiosk.FINAL_ACCEPT_VALUE_SENT
+                    print 'Accept ballot value = '
+                    print self.kiosk.ACCEPT_BALLT_VAL
                     #send proposal to multiple acceptors ...we will send to ppl in qurom and expect to get reply from all to reach majority !
                     #think upon how this qurom is going to be formed ...config file !
                     #HIGHEST_PREPARE_ID=proposer_id #it sassums itself in quorum too
