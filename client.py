@@ -136,6 +136,8 @@ class ClientThread(Thread):
                                     self.kiosk.CURRENT_MESSAGE=None
                                     self.kiosk.FINAL_ACCEPT_VALUE_SENT=None
                                     self.kiosk.ACCEPT_BALLT_VAL=None
+                    #The creator of a proposal should also send ack_accept or some sort of commit to other processes
+                    #It is a very important requirement. Take note!
                     elif request_type=='commit':
                         print 'tym to add in my log'
                         accept_id_tuple = (received_data_json['accept_id'][0],received_data_json['accept_id'][1])
