@@ -75,6 +75,9 @@ class ClientThread(Thread):
                             #The other processes should get this ack_accept request.?
                             #Or may be I don't have to send it because of the way counters are handled. I initialize it to 1.
                             #1 means it has already has ack accept from itself.
+                            current_ballot_id = (self.kiosk.CURRENT_PREPARE_ID,int(self.config.client_id))
+                            for key in self.config.REM_CLIENTS:
+                                self.kiosk.send_ack_accept_list.append({'to':key,'from':self.config.client_id,'accept_id':current_ballot_id,'accept_val':self.kiosk.FINAL_ACCEPT_VALUE_SENT})
 
                             
                     elif request_type == 'accept':
@@ -127,8 +130,9 @@ class ClientThread(Thread):
                                     print 'Contents of the log========='
                                     print self.kiosk.log
                                     #Current process is the leader!
-                                    self.kiosk.CURRENT_LEADER = self.config.client_id
-                                    print 'I am the LEADER NOW! WOWS!'
+                                    if accept_id_tuple[1] == int(self.config.client_id):
+                                        self.kiosk.CURRENT_LEADER = self.config.client_id
+                                        print 'I am the LEADER NOW! WOWS!'
                                     #Inform the other processes that you are the current leader through some broadcast.
                                     print 'Resetting the variables'
                                     self.kiosk.ACCEPTED_BALLT_ID= None #This will be a tuple now
@@ -136,6 +140,8 @@ class ClientThread(Thread):
                                     self.kiosk.CURRENT_MESSAGE=None
                                     self.kiosk.FINAL_ACCEPT_VALUE_SENT=None
                                     self.kiosk.ACCEPT_BALLT_VAL=None
+                                    self.kiosk.ack_counter = 1
+                                    self.kiosk.ack_arr = []
                     #The creator of a proposal should also send ack_accept or some sort of commit to other processes
                     #It is a very important requirement. Take note!
                     elif request_type=='commit':
@@ -244,6 +250,7 @@ class Kiosk():
         #Ack accept trying with list. Because we need to broadcast to all other processes on ever accept
         #So for different proposals we might have different messages so dict might not cut it.
         self.send_ack_accept_list = []
+        #self.self_ack_accept_list = []
 
 
 class Server():
@@ -401,7 +408,7 @@ class Server():
                     self.config.send_channels[to_val].send(to_send)
                     del(self.kiosk.send_accept_dict[chan])
                     
-                
+                time.sleep(1)
 
                 #send_ack_accept_list=list(self.kiosk.send_ack_accept_dict.keys())
                 #This list will contain broadcast info to be sent to all clients!
@@ -410,13 +417,12 @@ class Server():
                     chan = self.kiosk.send_ack_accept_list[0]
                     to_val=chan['to']
                     from_val=chan['from']
-                    print 'Sending acknowled. for accept to: '+to_val
+                    print 'Sending acknowled. for accept to: '+to_val+' proposal num '+str(chan['accept_id'])
                     to_send = json.dumps({'senderID': from_val, 'type': 'ack_accept', 'accept_id': chan['accept_id'], 'msg': chan['accept_val']})
                     self.config.send_channels[to_val].send(to_send)
                     del(self.kiosk.send_ack_accept_list[0])
  
                 send_commit_list= list(self.kiosk.send_commit_dict.keys())
-                #len_commit_list = len(send_commit_list)
                 for chan in send_commit_list:
                     to_val=chan
                     from_val=self.kiosk.send_commit_dict[chan]
@@ -424,15 +430,15 @@ class Server():
                     to_send = json.dumps({'senderID': from_val, 'type': 'commit', 'accept_id': self.kiosk.ACCEPTED_BALLT_ID, 'msg': self.kiosk.ACCEPT_BALLT_VAL })
                     self.config.send_channels[to_val].send(to_send)
                     del(self.kiosk.send_commit_dict[chan])
-                if len_commit_list > 0:
+                #if len_commit_list > 0:
                     #Commit message has been sent to all followers
                     #reset variables now
-                    print 'Resetting the variables'
-                    self.kiosk.ACCEPTED_BALLT_ID= None #This will be a tuple now
-                    self.kiosk.CURRENT_PREPARE_ID=None #This is just an integer. Represents the proposal number for the sender
-                    self.kiosk.CURRENT_MESSAGE=None
-                    self.kiosk.FINAL_ACCEPT_VALUE_SENT=None
-                    self.kiosk.ACCEPT_BALLT_VAL=None
+                    #print 'Resetting the variables. But not actually doing it.'
+                    # self.kiosk.ACCEPTED_BALLT_ID= None #This will be a tuple now
+                    # self.kiosk.CURRENT_PREPARE_ID=None #This is just an integer. Represents the proposal number for the sender
+                    # self.kiosk.CURRENT_MESSAGE=None
+                    # self.kiosk.FINAL_ACCEPT_VALUE_SENT=None
+                    # self.kiosk.ACCEPT_BALLT_VAL=None
                 time.sleep(5)
                     
             except Exception as e:
