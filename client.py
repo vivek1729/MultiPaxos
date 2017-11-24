@@ -33,8 +33,8 @@ class ClientThread(Thread):
         while True:
             try:
                 received_data = self.conn.recv(2048)
-                print 'Received data #########'+received_data
-                if received_data != '':
+                if received_data != '':    
+                    print 'Received data #########'+received_data
                     received_data_json=json.loads(received_data)
                     request_type = received_data_json['type']
                     sender_id = received_data_json['senderID']
@@ -518,14 +518,15 @@ class Server():
                 for c in self.clients:
                     c.close()
                 print 'Ended all client connections'
-                #End all threads.
-                for c in self.threads:
-                    #Close the client threads.
-                    c.join()
-                print 'Ended all client threads.'
-                print 'Need to close the server! Exit from the loop then.'
                 self.serverSocket.close()
                 os._exit(1) #Exit the whole application. Kill everything in the world.
+                #End all threads.
+                # for c in self.threads:
+                #     #Close the client threads.
+                #     c.join()
+                # print 'Ended all client threads.'
+                # print 'Need to close the server! Exit from the loop then.'
+                
             elif msg != '':
                 #self.config.logger.info('Value proposed by client...'+msg)
                 tokens = msg.split(' ')
