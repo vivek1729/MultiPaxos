@@ -176,6 +176,16 @@ class ClientThread(Thread):
                                     if accept_id_tuple[1] == int(self.config.client_id):
                                         self.kiosk.CURRENT_LEADER = self.config.client_id
                                         print 'I am the LEADER NOW! WOWS!'
+                                        if tokens[0] == 'add_kiosk':
+                                            #Add the newly added kiosk to list of total_clients in config.json
+                                            with open('config.json','r') as data_file:    
+                                                config_data = json.load(data_file)
+                                            #Add kiosk to array
+                                            config_data['total_clients'].append(tokens[1])
+                                            #Write updated json data to config.json
+                                            with open('config.json','w') as data_file:    
+                                                json.dump(config_data, data_file)
+                                            print 'Configuration change is complete. Kiosk added successfully to the system========='
 
                                     #Inform the other processes that you are the current leader through some broadcast.
                                     print 'Resetting the variables'
@@ -236,7 +246,7 @@ class SystemConfig():
 
 
         #Read data from the file
-        with open('config.json') as data_file:    
+        with open('config.json','r') as data_file:    
             data = json.load(data_file)
             self.TCP_IP = data['process_dict'][self.client_id]['tcp_ip']
             self.TCP_PORT = data['process_dict'][self.client_id]['tcp_port']
@@ -280,7 +290,7 @@ class Kiosk():
         self.FINAL_ACCEPT_VALUE_SENT=None
         self.ACCEPT_BALLT_VAL=None
         self.ack_arr = []
-        self.majority_count = 2
+        self.majority_count = 2 #This is wrong. Especially when new processes are added. So I need to correctly set majority count. Will do that when server is created.
         self.ack_counter = 1 #I assume the sender i.e. process making the proposal will automatically acknowledge proposal
         #I need to have a counter dictionary for ack acceptance instead of a single value since different
         #processes might be having different proposals and acks are broadcasted so..
@@ -310,6 +320,11 @@ class Server():
         self.config = sys_config
         self.threads = []
         self.clients = []
+        #Reset the majority count variable for kiosk.
+        #Becaus addition of new kiosks changes the config file. 2 is not the right value to start with
+        self.kiosk.majority_count = (len(self.config.REM_CLIENTS) + 1)/2 + 1
+        #Because the kiosk majority count is set up correctly here ^
+        #New clients in client thread initiation will also get the correct value. Hence done.
         self.serverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.serverSocket.bind((self.config.TCP_IP, self.config.TCP_PORT))
         self.serverSocket.listen(10)
@@ -614,3 +629,4 @@ if __name__ == "__main__":
 
     #Start server and pass in configuration information
     server = Server(kiosk_obj,sys_config)
+
