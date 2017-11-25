@@ -137,6 +137,8 @@ class ClientThread(Thread):
                                     #Add or remove clients. Make changes in majority accordingly.
                                     elif tokens[0] == 'add_kiosk':
                                         print 'This is a configuration change. Add a new kiosk'
+                                        #Append to total_clients array so that this process can connect to new server.
+                                        self.config.TOTAL_CLIENTS.append(tokens[1])
                                         self.config.REM_CLIENTS.append(tokens[1])
                                         print 'Added kisok to the system ==========>'+tokens[1]
                                         print 'Updating majority count now'
@@ -145,6 +147,7 @@ class ClientThread(Thread):
                                         #Sweet. This value is committed. Try to connect to this client now.
                                     elif tokens[0] == 'remove_kiosk':
                                         print 'This is a configuration change. Remove an existing kiosk'
+                                        #This is more complicated. Need to close relevant threads and send channels
                                         self.config.REM_CLIENTS.remove(tokens[1])
                                         print 'Removed kisok from the system ==========>'+tokens[1]
                                         print 'Updating majority count now'
@@ -247,7 +250,8 @@ class SystemConfig():
         self.logger= logging.getLogger(__name__)
 
         #Initialze channel states, incoming and outgoing channels
-        self.TOTAL_CLIENTS.remove(self.client_id)
+        if self.client_id in self.TOTAL_CLIENTS: 
+            self.TOTAL_CLIENTS.remove(self.client_id)
         self.channel_states = {}
         self.send_channels = {}
         self.receive_channels = {}
