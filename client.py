@@ -125,9 +125,32 @@ class ClientThread(Thread):
                                     #print self.kiosk.send_commit_dict
                                     print 'Also add '+str(self.kiosk.ACCEPT_BALLT_VAL)+' to my log right now'
                                     self.kiosk.log.append({'id':self.kiosk.ACCEPTED_BALLT_ID,'val':self.kiosk.ACCEPT_BALLT_VAL})
-                                    print 'Update balance in tickets'
-                                    self.kiosk.TICKETS -= int(self.kiosk.ACCEPT_BALLT_VAL)
-                                    print 'Remaining tickets in system ==========>'+str(self.kiosk.TICKETS)
+                                    
+                                    tokens = self.kiosk.ACCEPT_BALLT_VAL.split(' ')
+                                    #Update ticket balance only if it is a buy message
+                                    if tokens[0] == 'buy':
+                                        print 'Update balance in tickets'
+                                        self.kiosk.TICKETS -= int(tokens[1])
+                                        print 'Remaining tickets in system ==========>'+str(self.kiosk.TICKETS)
+
+                                    #Otherwise this is a configuration change kind of message
+                                    #Add or remove clients. Make changes in majority accordingly.
+                                    elif tokens[0] == 'add_kiosk':
+                                        print 'This is a configuration change. Add a new kiosk'
+                                        self.config.REM_CLIENTS.append(tokens[1])
+                                        print 'Added kisok to the system ==========>'+tokens[1]
+                                        print 'Updating majority count now'
+                                        self.kiosk.majority_count = (len(self.config.REM_CLIENTS) + 1)/2 + 1
+                                        print 'New majority count is '+str(self.kiosk.majority_count)
+                                        #Sweet. This value is committed. Try to connect to this client now.
+                                    elif tokens[0] == 'remove_kiosk':
+                                        print 'This is a configuration change. Remove an existing kiosk'
+                                        self.config.REM_CLIENTS.remove(tokens[1])
+                                        print 'Removed kisok from the system ==========>'+tokens[1]
+                                        print 'Updating majority count now'
+                                        self.kiosk.majority_count = (len(self.config.REM_CLIENTS) + 1)/2 + 1
+                                        print 'New majority count is '+str(self.kiosk.majority_count)
+
 
                                     #Print helper message that current request succeeded or not in processes that made proposals
                                     if (self.kiosk.CURRENT_PREPARE_ID,int(self.config.client_id)) == self.kiosk.ACCEPTED_BALLT_ID:
@@ -212,29 +235,31 @@ class SystemConfig():
         #Read data from the file
         with open('config.json') as data_file:    
             data = json.load(data_file)
-            self.TCP_IP = data['tcp_ip']
-            self.TCP_PORT = data[self.client_id]['tcp_port']
+            self.TCP_IP = data['process_dict'][self.client_id]['tcp_ip']
+            self.TCP_PORT = data['process_dict'][self.client_id]['tcp_port']
             self.REPLY_DELAY = data['reply_delay']
             self.REQUEST_DELAY = data['request_delay']
             self.TOTAL_CLIENTS = data['total_clients']
-            self.PROC_ID_MAPPING = data['reverse_dict']
+            self.PROC_ID_MAPPING = data['process_dict']
             self.per_threshold = data['per_threshold']
 
         #Initialize logger
         self.logger= logging.getLogger(__name__)
 
         #Initialze channel states, incoming and outgoing channels
-        self.TOTAL_CLIENTS.remove(self.TCP_PORT)
+        self.TOTAL_CLIENTS.remove(self.client_id)
         self.channel_states = {}
         self.send_channels = {}
         self.receive_channels = {}
         self.queue_send_markers = []
         self.REM_CLIENTS = []
-        print 'Total clients is '
+        print 'Total clients are '
         print self.TOTAL_CLIENTS
         for client in self.TOTAL_CLIENTS:
-            key = self.PROC_ID_MAPPING[str(client)]['proc_id']
-            self.REM_CLIENTS.append(key)
+            self.REM_CLIENTS.append(client)
+    
+        #Initialize channel states for all clients. We don't iterate over it. So we can populate the dict now
+        for key, value in self.PROC_ID_MAPPING.iteritems():
             self.channel_states[key] = {}
             self.channel_states[key]['flag'] = False
             self.channel_states[key]['state'] = []
@@ -358,9 +383,11 @@ class Server():
                 if len(self.config.TOTAL_CLIENTS) > 0:
                     tcpClient = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
                     #self.config.logger.info( 'Trying to connect to '+str(self.config.TOTAL_CLIENTS[0]))
-                    print 'Trying to connect to '+str(self.config.TOTAL_CLIENTS[0])                 
-                    tcpClient.connect((self.config.TCP_IP, self.config.TOTAL_CLIENTS[0]))
-                    key = self.config.PROC_ID_MAPPING[str(self.config.TOTAL_CLIENTS[0])]['proc_id']
+                    key = self.config.TOTAL_CLIENTS[0]
+                    process_ip = self.config.PROC_ID_MAPPING[key]['tcp_ip']
+                    process_port = self.config.PROC_ID_MAPPING[key]['tcp_port']
+                    print 'Trying to connect to '+str(key)                
+                    tcpClient.connect((process_ip, process_port))
                     #self.config.logger.info('Key is '+key)
                     self.config.send_channels[key] = tcpClient
                     self.config.logger.debug( self.config.send_channels) 
@@ -373,11 +400,6 @@ class Server():
                     print 'Remaining clients are '
                     print self.config.TOTAL_CLIENTS             
                     self.config.logger.debug(self.config.TOTAL_CLIENTS)
-                    
-                else:
-                    #self.config.logger.info('Have successfully connected to all clients!')
-                    print 'Have successfully connected to all clients!'
-                    break
             except Exception as e:
                 #self.config.logger.info('Unable to connect')
                 print 'Some error occured: ' + str(e)
@@ -539,38 +561,46 @@ class Server():
                     #This is just a test message send to show how kiosk and config can be used
                     #self.kiosk.CURRENT_LEADER = msg
                     #Populate the send_prepare_dict
-                    self.kiosk.CURRENT_MESSAGE = tokens[1]
-                    #Set the proposal ID too
-                    if self.kiosk.HIGHEST_PREPARE_ID is None:
-                        #This is a tuple now
-                        self.kiosk.HIGHEST_PREPARE_ID = (1,int(self.config.client_id))
-                        self.kiosk.CURRENT_PREPARE_ID = 1
-                    else:
-                        #This is a tuple now. So I fetch the first element and increment it to set current prepare id
-                        self.kiosk.CURRENT_PREPARE_ID = self.kiosk.HIGHEST_PREPARE_ID[0] + 1
-                        #Update highest ballot number as current request proposal is largest
-                        self.kiosk.HIGHEST_PREPARE_ID = (self.kiosk.CURRENT_PREPARE_ID,int(self.config.client_id))
-                    
-                    for key in self.config.REM_CLIENTS:
-                        self.kiosk.send_prepare_list.append({'to':key,'from':self.config.client_id,'prop':self.kiosk.CURRENT_PREPARE_ID})
 
-                    print 'Send prepare list '
-                    print self.kiosk.send_prepare_list
-                    print 'highest proposal num'+str(self.kiosk.HIGHEST_PREPARE_ID)
-                    print 'current proposal num'+str(self.kiosk.CURRENT_PREPARE_ID)
+                elif tokens[0] == 'add_kiosk':
+                    #Command would be of the form add_kiosk 4 which means add kiosk with id 4
+                    print 'Initiating configuration change. Adding new kiosk..'
+                    kiosk_id = tokens[1]                   
+                    #Broadcast this add message as proposal to all clients.
 
-                    print 'State of variables right now....'
-                    print 'Accept ballot id = '
-                    print self.kiosk.ACCEPTED_BALLT_ID
-                    print 'Final accept value to be sent = '
-                    print self.kiosk.FINAL_ACCEPT_VALUE_SENT
-                    print 'Accept ballot value = '
-                    print self.kiosk.ACCEPT_BALLT_VAL
-                    #send proposal to multiple acceptors ...we will send to ppl in qurom and expect to get reply from all to reach majority !
-                    #think upon how this qurom is going to be formed ...config file !
-                    #HIGHEST_PREPARE_ID=proposer_id #it sassums itself in quorum too
-                    #TO_SEND_DICT_PROPOSER ={#all the qurom ppl }
-                    #SEND_STATE='Proposer' #acting as a proposer
+                    #Try to connect to this kiosk yourself. Add it to your total clients
+                self.kiosk.CURRENT_MESSAGE = msg
+                #Set the proposal ID too
+                if self.kiosk.HIGHEST_PREPARE_ID is None:
+                    #This is a tuple now
+                    self.kiosk.HIGHEST_PREPARE_ID = (1,int(self.config.client_id))
+                    self.kiosk.CURRENT_PREPARE_ID = 1
+                else:
+                    #This is a tuple now. So I fetch the first element and increment it to set current prepare id
+                    self.kiosk.CURRENT_PREPARE_ID = self.kiosk.HIGHEST_PREPARE_ID[0] + 1
+                    #Update highest ballot number as current request proposal is largest
+                    self.kiosk.HIGHEST_PREPARE_ID = (self.kiosk.CURRENT_PREPARE_ID,int(self.config.client_id))
+                
+                for key in self.config.REM_CLIENTS:
+                    self.kiosk.send_prepare_list.append({'to':key,'from':self.config.client_id,'prop':self.kiosk.CURRENT_PREPARE_ID})
+
+                print 'Send prepare list '
+                print self.kiosk.send_prepare_list
+                print 'highest proposal num'+str(self.kiosk.HIGHEST_PREPARE_ID)
+                print 'current proposal num'+str(self.kiosk.CURRENT_PREPARE_ID)
+
+                print 'State of variables right now....'
+                print 'Accept ballot id = '
+                print self.kiosk.ACCEPTED_BALLT_ID
+                print 'Final accept value to be sent = '
+                print self.kiosk.FINAL_ACCEPT_VALUE_SENT
+                print 'Accept ballot value = '
+                print self.kiosk.ACCEPT_BALLT_VAL
+                #send proposal to multiple acceptors ...we will send to ppl in qurom and expect to get reply from all to reach majority !
+                #think upon how this qurom is going to be formed ...config file !
+                #HIGHEST_PREPARE_ID=proposer_id #it sassums itself in quorum too
+                #TO_SEND_DICT_PROPOSER ={#all the qurom ppl }
+                #SEND_STATE='Proposer' #acting as a proposer
             sys.stdout.write('[Me] ')
             sys.stdout.flush()
 
