@@ -159,7 +159,7 @@ class ClientThread(Thread):
                                     if (self.kiosk.CURRENT_PREPARE_ID,int(self.config.client_id)) == self.kiosk.ACCEPTED_BALLT_ID:
                                         #Current request was successful!
                                         print '#######################################'
-                                        print 'Your request was successfully processed!'
+                                        print 'Your request to '+self.kiosk.ACCEPT_BALLT_VAL+' was successfully processed!'
                                         print '#######################################'
                                     elif self.kiosk.CURRENT_PREPARE_ID is not None:
                                         print '#######################################'
