@@ -163,7 +163,7 @@ class ClientThread(Thread):
                                         print '#######################################'
                                     elif self.kiosk.CURRENT_PREPARE_ID is not None:
                                         print '#######################################'
-                                        print 'Your request could NOT be processed!'
+                                        print 'Your request to '+self.kiosk.ACCEPT_BALLT_VAL+' could NOT be processed!'
                                         print '#######################################'
                                     #Reset counters
                                     #self.kiosk.ack_counter = 1
