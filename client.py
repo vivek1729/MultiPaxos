@@ -39,7 +39,32 @@ class ClientThread(Thread):
                     request_type = received_data_json['type']
                     sender_id = received_data_json['senderID']
                     print 'Received some data..'+received_data
-                    if request_type == 'prep':
+                    if request_type == 'forward':
+                        #You are the leader and you received some forwarded request from other server.
+                        print 'Starting a new request for the forwarded request'
+                        self.kiosk.CURRENT_MESSAGE = received_data_json['msg']
+                        #Set the proposal ID too
+                        if self.kiosk.HIGHEST_PREPARE_ID is None:
+                            #This is a tuple now
+                            self.kiosk.HIGHEST_PREPARE_ID = (1,int(self.config.client_id))
+                            self.kiosk.CURRENT_PREPARE_ID = 1
+                        else:
+                            #This is a tuple now. So I fetch the first element and increment it to set current prepare id
+                            self.kiosk.CURRENT_PREPARE_ID = self.kiosk.HIGHEST_PREPARE_ID[0] + 1
+                            #Update highest ballot number as current request proposal is largest
+                            self.kiosk.HIGHEST_PREPARE_ID = (self.kiosk.CURRENT_PREPARE_ID,int(self.config.client_id))
+                        
+                        self.kiosk.FINAL_ACCEPT_VALUE_SENT = self.kiosk.CURRENT_MESSAGE
+                        self.kiosk.ACCEPTED_BALLT_ID = (self.kiosk.CURRENT_PREPARE_ID,int(self.config.client_id))
+                        self.kiosk.ACCEPT_BALLT_VAL = self.kiosk.CURRENT_MESSAGE
+                        current_ballot_id = (self.kiosk.CURRENT_PREPARE_ID,int(self.config.client_id))
+                        for key in self.config.REM_CLIENTS:
+                            #Current kiosk is the leader. Send a normal accept** request
+                            print 'Directly send accept request.'
+                            self.kiosk.send_accept_list.append({'to':key,'from':self.config.client_id,'prop':self.kiosk.CURRENT_PREPARE_ID,'accept_val':self.kiosk.FINAL_ACCEPT_VALUE_SENT})
+                            self.kiosk.send_ack_accept_list.append({'to':key,'from':self.config.client_id,'accept_id':current_ballot_id,'accept_val':self.kiosk.FINAL_ACCEPT_VALUE_SENT})
+
+                    elif request_type == 'prep':
                         if self.kiosk.HIGHEST_PREPARE_ID is None or \
                         received_data_json['proposalNum'] > self.kiosk.HIGHEST_PREPARE_ID[0] or \
                         ( received_data_json['proposalNum'] == self.kiosk.HIGHEST_PREPARE_ID[0] \
@@ -84,9 +109,12 @@ class ClientThread(Thread):
 
                             
                     elif request_type == 'accept':
-                        if received_data_json['proposalNum'] > self.kiosk.HIGHEST_PREPARE_ID[0] or \
+                        if self.kiosk.HIGHEST_PREPARE_ID is None or \
+                        received_data_json['proposalNum'] > self.kiosk.HIGHEST_PREPARE_ID[0] or \
                         ( received_data_json['proposalNum'] == self.kiosk.HIGHEST_PREPARE_ID[0] \
                             and int(sender_id) >= self.kiosk.HIGHEST_PREPARE_ID[1]):
+                            if self.kiosk.HIGHEST_PREPARE_ID is None:
+                                self.kiosk.HIGHEST_PREPARE_ID = (received_data_json['proposalNum'],int(sender_id))
                             self.kiosk.ACCEPTED_BALLT_ID = (received_data_json['proposalNum'],int(sender_id))
                             self.kiosk.ACCEPT_BALLT_VAL = received_data_json['accept_val']
                             #Populate the ack dictionary
@@ -282,7 +310,7 @@ class SystemConfig():
 class Kiosk():
     def __init__(self):
         self.TICKETS=100
-        self.CURRENT_LEADER=None
+        self.CURRENT_LEADER='1'
         self.ACCEPTED_BALLT_ID= None #This will be a tuple now
         self.HIGHEST_PREPARE_ID=None #This will be a tuple now
         self.CURRENT_PREPARE_ID=None #This is just an integer. Represents the proposal number for the sender
@@ -306,6 +334,7 @@ class Kiosk():
         self.send_commit_dict={};##Dict for sending commit as distinguished learner
         #Ack accept trying with list. Because we need to broadcast to all other processes on ever accept
         #So for different proposals we might have different messages so dict might not cut it.
+        self.send_forward_list = []
         self.send_prepare_list = []
         self.send_ack_prepare_list = []
         self.send_accept_list = []
@@ -423,6 +452,9 @@ class Server():
                 #self.config.logger.info('Unable to connect')
                 print 'Some error occured: ' + str(e)
                 print 'Unable to connect'
+                print 'Try with the next item in loop'
+                del(self.config.TOTAL_CLIENTS[0])
+                continue
 
 
     ########################
@@ -441,6 +473,25 @@ class Server():
                 #print "Vacating all the dictionaries !!"
                 # dictionaries format== {to:from, to:from, to:from} #can "to" be non unique??
                 #send_prep_list = list( self.kiosk.send_prepare_dict.keys() )
+            while len(self.kiosk.send_forward_list) > 0:
+                try:
+                    chan=self.kiosk.send_forward_list[0]
+                    print "@@@to_send_forward" + chan['to']
+                    to_val=chan['to']
+                    from_val=chan['from']
+                    print 'Sending forward request to: '+ to_val
+                    to_send = json.dumps({'senderID': from_val, 'type': 'forward','msg': chan['msg']})
+                    self.config.send_channels[to_val].send(to_send)
+                    del(self.kiosk.send_forward_list[0])
+                except Exception as e:
+                    print 'Error while sending forward request to leader.' + str(e)
+                    print 'Try with the next item in loop'
+                    del(self.kiosk.send_forward_list[0])
+                    print 'Leader is dead may be?'
+                    self.kiosk.CURRENT_LEADER = None
+                    continue
+
+
             while len(self.kiosk.send_prepare_list) > 0:
                 try:
                     chan=self.kiosk.send_prepare_list[0]
@@ -587,21 +638,42 @@ class Server():
                     kiosk_id = tokens[1]                   
                     #Broadcast this add message as proposal to all clients.
 
-                    #Try to connect to this kiosk yourself. Add it to your total clients
+                 
                 self.kiosk.CURRENT_MESSAGE = msg
-                #Set the proposal ID too
-                if self.kiosk.HIGHEST_PREPARE_ID is None:
-                    #This is a tuple now
-                    self.kiosk.HIGHEST_PREPARE_ID = (1,int(self.config.client_id))
-                    self.kiosk.CURRENT_PREPARE_ID = 1
+
+                #No need to set the proposal id or anything. Just forward this request.
+                if self.config.client_id != self.kiosk.CURRENT_LEADER and self.kiosk.CURRENT_LEADER is not None:
+                    print 'I am not the leader. Forwarding this request to current leader.'
+                    self.kiosk.send_forward_list.append({'to':self.kiosk.CURRENT_LEADER,'from':self.config.client_id,'msg':self.kiosk.CURRENT_MESSAGE})
+
                 else:
-                    #This is a tuple now. So I fetch the first element and increment it to set current prepare id
-                    self.kiosk.CURRENT_PREPARE_ID = self.kiosk.HIGHEST_PREPARE_ID[0] + 1
-                    #Update highest ballot number as current request proposal is largest
-                    self.kiosk.HIGHEST_PREPARE_ID = (self.kiosk.CURRENT_PREPARE_ID,int(self.config.client_id))
-                
-                for key in self.config.REM_CLIENTS:
-                    self.kiosk.send_prepare_list.append({'to':key,'from':self.config.client_id,'prop':self.kiosk.CURRENT_PREPARE_ID})
+                    #Set the proposal ID too
+                    if self.kiosk.HIGHEST_PREPARE_ID is None:
+                        #This is a tuple now
+                        self.kiosk.HIGHEST_PREPARE_ID = (1,int(self.config.client_id))
+                        self.kiosk.CURRENT_PREPARE_ID = 1
+                    else:
+                        #This is a tuple now. So I fetch the first element and increment it to set current prepare id
+                        self.kiosk.CURRENT_PREPARE_ID = self.kiosk.HIGHEST_PREPARE_ID[0] + 1
+                        #Update highest ballot number as current request proposal is largest
+                        self.kiosk.HIGHEST_PREPARE_ID = (self.kiosk.CURRENT_PREPARE_ID,int(self.config.client_id))
+                    
+                    if self.config.client_id == self.kiosk.CURRENT_LEADER:
+                        #Set some kiosk params if leader is sending request in Multi Paxos phase. Proposals are not required.
+                        self.kiosk.FINAL_ACCEPT_VALUE_SENT = self.kiosk.CURRENT_MESSAGE
+                        self.kiosk.ACCEPTED_BALLT_ID = (self.kiosk.CURRENT_PREPARE_ID,int(self.config.client_id))
+                        self.kiosk.ACCEPT_BALLT_VAL = self.kiosk.CURRENT_MESSAGE
+                        current_ballot_id = (self.kiosk.CURRENT_PREPARE_ID,int(self.config.client_id))
+
+                    for key in self.config.REM_CLIENTS:
+                        if self.config.client_id == self.kiosk.CURRENT_LEADER :
+                            #Current kiosk is the leader. Send a normal accept** request
+                            print 'Directly send accept request.'
+                            self.kiosk.send_accept_list.append({'to':key,'from':self.config.client_id,'prop':self.kiosk.CURRENT_PREPARE_ID,'accept_val':self.kiosk.FINAL_ACCEPT_VALUE_SENT})
+                            self.kiosk.send_ack_accept_list.append({'to':key,'from':self.config.client_id,'accept_id':current_ballot_id,'accept_val':self.kiosk.FINAL_ACCEPT_VALUE_SENT})
+                        elif self.kiosk.CURRENT_LEADER is None:
+                            print 'Sending prepare request. This will initiate a new election'
+                            self.kiosk.send_prepare_list.append({'to':key,'from':self.config.client_id,'prop':self.kiosk.CURRENT_PREPARE_ID})
 
                 print 'Send prepare list '
                 print self.kiosk.send_prepare_list
@@ -609,6 +681,8 @@ class Server():
                 print 'current proposal num'+str(self.kiosk.CURRENT_PREPARE_ID)
 
                 print 'State of variables right now....'
+                print 'Current leader id = '
+                print self.kiosk.CURRENT_LEADER
                 print 'Accept ballot id = '
                 print self.kiosk.ACCEPTED_BALLT_ID
                 print 'Final accept value to be sent = '
