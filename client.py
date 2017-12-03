@@ -78,6 +78,8 @@ class ClientThread(Thread):
                             self.kiosk.send_ack_accept_list.append({'to':key,'from':self.config.client_id,'accept_id':current_ballot_id,'accept_val':self.kiosk.FINAL_ACCEPT_VALUE_SENT})
 
                     elif request_type == 'prep':
+                        print 'Highest prepare ID'
+                        print self.kiosk.HIGHEST_PREPARE_ID
                         if self.kiosk.HIGHEST_PREPARE_ID is None or \
                         received_data_json['proposalNum'] > self.kiosk.HIGHEST_PREPARE_ID[0] or \
                         ( received_data_json['proposalNum'] == self.kiosk.HIGHEST_PREPARE_ID[0] \
@@ -126,7 +128,7 @@ class ClientThread(Thread):
                         received_data_json['proposalNum'] > self.kiosk.HIGHEST_PREPARE_ID[0] or \
                         ( received_data_json['proposalNum'] == self.kiosk.HIGHEST_PREPARE_ID[0] \
                             and int(sender_id) >= self.kiosk.HIGHEST_PREPARE_ID[1]):
-                            if self.kiosk.HIGHEST_PREPARE_ID is None:
+                            if self.kiosk.HIGHEST_PREPARE_ID is None or received_data_json['proposalNum'] > self.kiosk.HIGHEST_PREPARE_ID[0]:
                                 self.kiosk.HIGHEST_PREPARE_ID = (received_data_json['proposalNum'],int(sender_id))
                             self.kiosk.ACCEPTED_BALLT_ID = (received_data_json['proposalNum'],int(sender_id))
                             self.kiosk.ACCEPT_BALLT_VAL = received_data_json['accept_val']
@@ -267,6 +269,43 @@ class ClientThread(Thread):
                         self.kiosk.CURRENT_LEADER=received_data_json['senderID']
                         self.kiosk.lastAuthRcvTime=brandnewTime
 
+                        #I need to reconcile logs here. Especially for a new kiosk that joins.
+                        leader_log = received_data_json['log'] #This is log of the leader
+                        #ids in leader_log would be 2d array, need to convert that to tuple
+                        for item in leader_log:
+                            item['id'] = (item['id'][0],item['id'][1])
+
+                        diff_list = [item for item in leader_log if item not in self.kiosk.log]
+                        leader_ballot_id = None
+                        if len(diff_list) > 0:
+                           leader_ballot_id = diff_list[-1]['id'] #Accept ballot id of last log entry
+                        # print 'Leader log ->'
+                        # print leader_log
+                        # print 'My log ->'
+                        # print self.kiosk.log
+                        # print 'Leader ballot ID ->'
+                        # print leader_ballot_id
+                        # print 'My accept ballot ID ->'
+                        # print self.kiosk.ACCEPTED_BALLT_ID
+                        '''
+                        
+                        '''
+                        if diff_list > 0 and leader_ballot_id != self.kiosk.ACCEPTED_BALLT_ID:
+                            print 'Reconciling logs...'
+                            self.kiosk.TICKETS = 100
+                            self.kiosk.log = leader_log
+                            for entry in self.kiosk.log:
+                                cmd = entry['val'].split(' ')
+                                if cmd[0] == 'buy':
+                                    #Remove from state machine.
+                                    self.kiosk.TICKETS -= int(cmd[1])
+                            #Set highest prepare ID after reconciliation also.
+                            if self.kiosk.HIGHEST_PREPARE_ID is None or self.kiosk.log[-1]['id'][0] > self.kiosk.HIGHEST_PREPARE_ID[0]:
+                                self.kiosk.HIGHEST_PREPARE_ID = self.kiosk.log[-1]['id']
+                            print 'Remaining tickets in system ==========>'+str(self.kiosk.TICKETS)
+                            print 'Contents of the log========='
+                            print self.kiosk.log
+                            print 'Reconciliation complete.'
                     else:
                         print 'some error'
 
@@ -278,7 +317,7 @@ class ClientThread(Thread):
                         print self.config.timeout_delay
                         if time.time()-self.kiosk.lastAuthRcvTime > self.config.timeout_delay :
                             print 'Time to panic !! No leader in system'
-                            self.kiosk.CURRENT_LEADER =None
+                            #self.kiosk.CURRENT_LEADER =None
 
                     
                     
@@ -618,7 +657,7 @@ class Server():
             counter = 0
             #Try sending heartbeats only if you are current leader.
             if self.config.client_id == self.kiosk.CURRENT_LEADER:
-                print 'I am the leader. I can send heartbeats!'
+                #print 'I am the leader. I can send heartbeats!'
                 while counter < len(self.config.REM_CLIENTS):
                     try:
                         to_val=self.config.REM_CLIENTS[counter]
