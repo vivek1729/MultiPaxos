@@ -34,12 +34,25 @@ class ClientThread(Thread):
             try:
                 received_data = self.conn.recv(2048)
                 if received_data != '':    
-                    print 'Received data #########'+received_data
+                    #print 'Received data #########'+received_data
                     received_data_json=json.loads(received_data)
                     request_type = received_data_json['type']
                     sender_id = received_data_json['senderID']
-                    print 'Received some data..'+received_data
-                    if request_type == 'forward':
+                    #print 'Received some data..'+received_data
+                    if request_type == 'config_meta':
+                        #data = json.dumps({'senderID': self.config.client_id, 'type': 'config_meta','msg':filtered_rem_clients })
+                        #Reconcile with rem_clients, add new server if not already present. Populate total_clients accordingly
+                        aux_list = received_data_json['msg']
+                        print 'Aux list is'
+                        print aux_list
+                        diff_list = [item for item in aux_list if item not in self.config.REM_CLIENTS]
+                        print 'Extra elements if any'
+                        print diff_list
+                        if len(diff_list) > 0:
+                            print 'Since it does not exist in Rem list. It does not exist in total list. So add to total list.'
+                            self.config.REM_CLIENTS.extend(diff_list)
+                            self.config.TOTAL_CLIENTS.extend(diff_list)
+                    elif request_type == 'forward':
                         #You are the leader and you received some forwarded request from other server.
                         print 'Starting a new request for the forwarded request'
                         self.kiosk.CURRENT_MESSAGE = received_data_json['msg']
@@ -165,9 +178,10 @@ class ClientThread(Thread):
                                     #Add or remove clients. Make changes in majority accordingly.
                                     elif tokens[0] == 'add_kiosk':
                                         print 'This is a configuration change. Add a new kiosk'
-                                        #Append to total_clients array so that this process can connect to new server.
-                                        self.config.TOTAL_CLIENTS.append(tokens[1])
-                                        self.config.REM_CLIENTS.append(tokens[1])
+                                        #Append to total_clients array so that this process can connect to new server (only if it does not already exist)
+                                        if tokens[1] not in self.config.REM_CLIENTS:
+                                            self.config.TOTAL_CLIENTS.append(tokens[1])
+                                            self.config.REM_CLIENTS.append(tokens[1])
                                         print 'Added kisok to the system ==========>'+tokens[1]
                                         print 'Updating majority count now'
                                         self.kiosk.majority_count = (len(self.config.REM_CLIENTS) + 1)/2 + 1
@@ -206,13 +220,13 @@ class ClientThread(Thread):
                                         print 'I am the LEADER NOW! WOWS!'
                                         if tokens[0] == 'add_kiosk':
                                             #Add the newly added kiosk to list of total_clients in config.json
-                                            with open('config.json','r') as data_file:    
-                                                config_data = json.load(data_file)
-                                            #Add kiosk to array
-                                            config_data['total_clients'].append(tokens[1])
-                                            #Write updated json data to config.json
-                                            with open('config.json','w') as data_file:    
-                                                json.dump(config_data, data_file)
+                                            # with open('config.json','r') as data_file:    
+                                            #     config_data = json.load(data_file)
+                                            # #Add kiosk to array
+                                            # config_data['total_clients'].append(tokens[1])
+                                            # #Write updated json data to config.json
+                                            # with open('config.json','w') as data_file:    
+                                            #     json.dump(config_data, data_file)
                                             print 'Configuration change is complete. Kiosk added successfully to the system========='
 
                                     #Inform the other processes that you are the current leader through some broadcast.
@@ -247,8 +261,8 @@ class ClientThread(Thread):
 
                     elif request_type== 'leaderAuth':
                         brandnewTime=time.time()
-                        print 'I got leader auth'
-                        print brandnewTime
+                        #print 'I got leader auth'
+                        #print brandnewTime
 
                         self.kiosk.CURRENT_LEADER=received_data_json['senderID']
                         self.kiosk.lastAuthRcvTime=brandnewTime
@@ -456,7 +470,17 @@ class Server():
                     tcpClient.connect((process_ip, process_port))
                     #self.config.logger.info('Key is '+key)
                     self.config.send_channels[key] = tcpClient
-                    self.config.logger.debug( self.config.send_channels) 
+                    self.config.logger.debug( self.config.send_channels)
+                    #Send a message to the newly connected server with the rem_clients for that server.
+                    #This message sending happens only if the new client has an add_kiosk entry in log
+                    check_msg = 'add_kiosk '+key
+                    log_exist = [item for item in self.kiosk.log if item['val'] == check_msg]
+                    if len(log_exist) > 0:
+                        print 'Server exists in log and was kiosk was added. Send meta info now.'
+                        filtered_rem_clients = [elm for elm in self.config.REM_CLIENTS if elm != key]
+                        filtered_rem_clients.append(self.config.client_id)
+                        data = json.dumps({'senderID': self.config.client_id, 'type': 'config_meta','msg':filtered_rem_clients })
+                        self.config.send_channels[key].send(data)
                     #self.config.logger.info('Length of send channels')
                     print 'Length of send channels'
                     print len(self.config.send_channels)          
@@ -599,12 +623,12 @@ class Server():
                     try:
                         to_val=self.config.REM_CLIENTS[counter]
                         from_val=self.config.client_id
-                        print 'Sending heartbeat auth to: '+to_val +'from our leader..'+ from_val
+                        #print 'Sending heartbeat auth to: '+to_val +'from our leader..'+ from_val
                         to_send = json.dumps({'senderID': from_val, 'log':self.kiosk.log, 'type': 'leaderAuth' })
                         self.config.send_channels[to_val].send(to_send)
                         counter=counter+1
                     except Exception as e:
-                        print 'Error while sending accept acknowledgement' + str(e)
+                        print 'Error while sending accept heartbeat' + str(e)
                         print 'Try with the next item in loop'
                         counter=counter+1
                         continue
