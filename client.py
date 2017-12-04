@@ -777,25 +777,31 @@ class Server():
             elif msg != '':
                 #self.config.logger.info('Value proposed by client...'+msg)
                 tokens = msg.split(' ')
-                if tokens[0] == 'buy':
-                    #Command would be of the form buy 5 which means buy 5 tickets
-                    print 'Initiating election'
-                   
-                    #proposer_id =  #any ballot number greater than it has knowldege of !
+                if tokens[0] == 'show':
+                    #Just print remaining tickets and log. No need to make proposal or anything
+                    print 'Remaining tickets in system ==========>'+str(self.kiosk.TICKETS)
+                    print 'Contents of the log========='
+                    print self.kiosk.log
+                else:   
+                    if tokens[0] == 'buy':
+                        #Command would be of the form buy 5 which means buy 5 tickets
+                        print 'Initiating election'
+                       
+                        #proposer_id =  #any ballot number greater than it has knowldege of !
 
-                    #This is just a test message send to show how kiosk and config can be used
-                    #self.kiosk.CURRENT_LEADER = msg
-                    #Populate the send_prepare_dict
+                        #This is just a test message send to show how kiosk and config can be used
+                        #self.kiosk.CURRENT_LEADER = msg
+                        #Populate the send_prepare_dict
 
-                elif tokens[0] == 'add_kiosk':
-                    #Command would be of the form add_kiosk 4 which means add kiosk with id 4
-                    print 'Initiating configuration change. Adding new kiosk..'
-                    kiosk_id = tokens[1]                   
-                    #Broadcast this add message as proposal to all clients.
+                    elif tokens[0] == 'add_kiosk':
+                        #Command would be of the form add_kiosk 4 which means add kiosk with id 4
+                        print 'Initiating configuration change. Adding new kiosk..'
+                        kiosk_id = tokens[1]                   
+                        #Broadcast this add message as proposal to all clients.
 
-                 
-                self.kiosk.CURRENT_MESSAGE = msg
-                self.makeProposal()
+                     
+                    self.kiosk.CURRENT_MESSAGE = msg
+                    self.makeProposal()
                 
             sys.stdout.write('[Me] ')
             sys.stdout.flush()
