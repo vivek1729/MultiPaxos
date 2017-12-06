@@ -302,9 +302,9 @@ class ClientThread(Thread):
                             #Set highest prepare ID after reconciliation also.
                             if self.kiosk.HIGHEST_PREPARE_ID is None or self.kiosk.log[-1]['id'][0] > self.kiosk.HIGHEST_PREPARE_ID[0]:
                                 self.kiosk.HIGHEST_PREPARE_ID = self.kiosk.log[-1]['id']
-                            print 'Remaining tickets in system ==========>'+str(self.kiosk.TICKETS)
-                            print 'Contents of the log========='
-                            print self.kiosk.log
+                            #print 'Remaining tickets in system ==========>'+str(self.kiosk.TICKETS)
+                            #print 'Contents of the log========='
+                            #print self.kiosk.log
                             print 'Reconciliation complete.'
                     else:
                         print 'some error'
@@ -314,7 +314,7 @@ class ClientThread(Thread):
                         # print 'I am printing both received and present for heartbeat from leader..'
                         # print time.time()
                         #print self.kiosk.lastAuthRcvTime 
-                        print self.config.timeout_delay
+                        #print self.config.timeout_delay
                         if time.time()-self.kiosk.lastAuthRcvTime > self.config.timeout_delay :
                             print 'Time to panic !! No leader in system'
                             #self.kiosk.CURRENT_LEADER =None
