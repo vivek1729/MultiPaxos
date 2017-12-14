@@ -21,7 +21,7 @@ But hey, we have just learned Paxos, which is a great approach for solving this
 kind of site failure, and network partitioning problems. Let’s design a system
 using Multi-Paxos.
 
-##1 Data Management Protocol
+## 1 Data Management Protocol
 Multi-Paxos ensures that there is a totally ordered log. Hence all kiosk logs will
 have the same order. It will also handle failures. In particular, if a kiosk fails,
 the ticket selling history and the number of tickets in pool will still be available
@@ -36,11 +36,11 @@ Additionally, to ensure the smooth decommissioning of kiosks, the system will
 have the ability to cope with Configuration Changes, using Multi-Paxos’s con-
 figuration change mechanism.
 
-##2 Application Protocol
+## 2 Application Protocol
 In this project, it is not required to ensure causality between requests, as long
 as, the MUTEX problem is solved.
 
-##3 Implementation Detail Suggestions
+## 3 Implementation Detail Suggestions
 Before you start, you should have a good understanding of Multi-Paxos, so that
 you can design your data structures and program behavior effectively. Try to
 implement the Data Management Protocol (Multi-Paxos) first, ie, focus on the
@@ -50,7 +50,7 @@ you can ensure that the log can be replicated, site failures can be handled etc,
 you can then continue and add the application logic to solve the ticket selling
 problem.
 
-##4 User Interface
+## 4 User Interface
 We will have 3 datacenters up at the beginning. And the configuration change
 will add two more datacenters to the cluster. Each datacenter should have a
 client connected to it and receive commands from the client.
@@ -75,7 +75,7 @@ Explanation: Adds an already live kiosk into the system configuration using Mult
 Explanation: Hard kill of the kiosk/client. Kills the entire process and simulates a site failure
 
 
-##5 Usage
+## 5 Usage
 - Start the client/kiosk
 `python client.py <kiosk_id>`
 For configuration change i.e. adding or removing a kiosk from the system, make sure that
